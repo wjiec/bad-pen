@@ -7,6 +7,7 @@
 
 * [什么是云原生](./defining-cloud-native.md)
 * [在生产环境中运行云原生应用程序](./runing-cloud-native)
+* [云原生软件平台](./platform-for-cloud-native.md)
 
 
 
