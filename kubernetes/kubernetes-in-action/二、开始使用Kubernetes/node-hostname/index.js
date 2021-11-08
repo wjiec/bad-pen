@@ -7,6 +7,6 @@ const server = http.createServer((request, response) => {
     console.log(`received request from ${request.connection.remoteAddress}`)
 
     response.writeHead(200)
-    response.end(`You've hit <${os.hostname()}>`)
+    response.end(`You've hit <${os.hostname()}>\n`)
 })
 server.listen(8080)
