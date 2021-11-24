@@ -27,6 +27,8 @@ cp proxmoxlib.js proxmoxlib.js.bak
 // ...
 void({ //Ext.Msg.show({
   title: gettext('No valid subscription'),
+  
+systemctl restart pveproxy.service
 ```
 
 
@@ -38,5 +40,13 @@ iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-ports 8006
 
 # https://pve.proxmox.com/wiki/Certificate_Management
 # https://www.willnet.net/index.php/archives/136/
+```
+
+
+
+### 直通
+
+```bash
+# https://foxi.buduanwang.vip/yj/561.html/
 ```
 
