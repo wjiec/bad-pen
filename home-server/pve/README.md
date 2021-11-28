@@ -1,6 +1,12 @@
 PVE相关的一些操作
 ---------------------------
 
+网络拓扑图（在线链接：https://www.processon.com/view/link/61a38768e401fd48c0b5e50c）
+
+![离线拓扑图](../\assets\pve-server.jpg)
+
+
+
 
 
 ### Failed to fetch https://enterprise.proxmox.com/debian/pve/dists/bullseye/InRelease  401  Unauthorized
@@ -48,5 +54,12 @@ iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-ports 8006
 
 ```bash
 # https://foxi.buduanwang.vip/yj/561.html/
+
+cat >> /etc/modules <<EOF
+vfio
+vfio_iommu_type1
+vfio_pci
+vfio_virqfd
+EOF
 ```
 
