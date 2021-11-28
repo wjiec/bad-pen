@@ -189,3 +189,55 @@ kubectl label pod http-hostname env=development --overwrite # 修改标签需要
 
 ### 通过标签选择器列出Pod子集
 
+标签选择器允许我们选择标记有特定标签的pod子集，并对这些pod执行操作。标签选择器可以根据资源的以下条件来选择资源：
+
+* 包含（或者不包含）使用特定键的标签：`-l 'key-includede' -l '!key-excluded'`
+* 包含具有特定键和值的标签：`-l key=value`
+* 包含具有特定键的标签，但其值与我们指定的不同：`-l key!=value`
+* 包含具有特定键的标签，其值与我们指定的任一一个相同：`-l 'key in (value1,value2)'`
+* 包含具有特定键的标签，其值与我们指定的都不同：`-l 'key notin (value1,value2)'`
+
+可以使用逗号分隔多个条件表示需要同时满足（且的关系），使用多个`-l`参数来分隔多个条件表示只需要满足一个即可（或的关系）
+
+```
+k get po -l 'app in (db,mq),env=prod' -l 'app notin (db,mq),env!=prod'
+// ((app in [db, mq]) AND env = prod) OR ((app notin [db, mq]) AND env != prod)
+```
+
+
+
+### 使用标签和选择器来约束Pod调度
+
+在Kubernetes中，我们创建的Pod都是近乎随机地调度到工作节点上，而在某些情况下，我们希望将Pod调度某些特定的节点上。在这种情况下下我们不应该直接指定一个确切的节点，而是应该使用标签和节点选择器来描述对节点的需求。
+
+```bash
+k label node apple gpu=true
+k label node banana ssd=true
+```
+
+通常来说，当运维团队在向集群中添加新节点时，会通过附加标签来对节点进行分类，这些标签指定节点提供的硬件类型或者节点上对调度pod能提供便利的其他信息。
+
+#### 使用标签选择器
+
+接下来我们就可以在yaml文件中通过声明`nodeSelector`来选择我们所需要调度到的特定节点
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami
+  labels:
+    app: http-whoami
+spec:
+  nodeSelector:
+    ssd: "true"
+    gpu: "false"
+  containers:
+  - name: app
+    image: http-whoami
+```
+
+#### 调度到特定的节点
+
+我们也可以通过每个节点都有的唯一标签`kubenetes.io/hostname`（该节点的实际主机名）来选择某个具体的节点。**这是不推荐的，除非你知道你在做什么**
+
