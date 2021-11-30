@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 )
 
 var (
+	healthy = -1
 	ListenAddr = ":8080"
 )
 
@@ -20,11 +22,23 @@ func init() {
 		}
 		ListenAddr = addr
 	}
+
+	if count := os.Getenv("SERVICE_HEALTHY_COUNT"); count != "" {
+		if num, err := strconv.Atoi(count); err == nil {
+			healthy = num
+		}
+	}
 }
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("received request from %s (method=%s, uri=%s)", r.RemoteAddr, r.Method, r.RequestURI)
+		if healthy > 0 {
+			healthy--
+		} else if healthy == 0 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
 		if hostname, err := os.Hostname(); err == nil {
 			_, _ = w.Write([]byte(fmt.Sprintf("You've hit <%s> from %q\n\n", hostname, r.RemoteAddr)))
