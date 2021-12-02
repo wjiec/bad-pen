@@ -69,3 +69,75 @@ spec:
 * **保持探针的轻量**：探针不要消耗太多的计算资源，因为这些资源也是算在容器的资源配额里的
 * **无需在探针中实现重试**：探针的失败预制是可设置的，在探针中实现重试循环是浪费资源
 
+
+
+### ReplicationController
+
+ReplicationController是一种Kubernetes资源，它可以确保托管于它的Pod始终保持运行状态。如果Pod因任何原因消失（例如节点从集群中消失或者Pod被人意外删除），则ReplicationController会创建一个新的替代Pod。
+
+一般而言，ReplicationController作用是创建和管理一个Pod的多个副本（Replicas），这就是ReplicationController名字的由来。
+
+#### ReplicationController的操作
+
+Rc会持续监控正在运行的Pod列表，并保证对应“选择器”的Pod数量与期望相符。Rc的工作是确保Pod的数量始终与其标签选择器相匹配。Rc主要由三部分组成：
+
+* `Label Selector`：标签选择器用于确定Rc的工作范围
+* `Replica Count`：副本数用于指定应该要运行的Pod数量
+* `Pod Template`：Pod模板用于创建新的Pod副本
+
+Rc的副本数量、标签选择器甚至Pod模板都是可以随意修改的，但是**只有副本数量的变更会影响现有的Pod**。
+
+* 修改标签选择器只会让某些Pod“脱离”Rc的视线范围，控制器将会停止关注原有的Pod，所以不会影响现有的Pod。
+* 修改Pod模板只会对下一次新建的Pod产生影响而不会导致现有Pod发生变化。
+
+##### 使用ReplicationController的好处
+
+ReplicationController虽然是一个非常简单的概念，但却提供了以下强大的功能：
+
+* 确保一个Pod（或者多个副本）持续运行，在Pod丢失后重新创建一个
+* 集群节点发生故障时，它将俄日故障节点上受Rc管理的Pod创建副本
+* 能轻松实现Pod的水平伸缩（手动或者自动）
+
+#### 创建一个ReplicationController
+
+与其他资源一样，我们可以通过在一个yaml文件声明Rc的方式来创建
+
+```yaml
+kind: ReplicationController
+apiVersion: v1
+metadata: http-whoami-rc
+spec:
+  selector:
+  	app: http-whoami
+  replicas: 3
+  template:
+  	metadata:
+  	  labels:
+  	    app: http-whoami
+  	spec:
+  	  containers:
+  	  - name: app
+  	    image: http-whoami
+  	    ports:
+  	    - containerPort: 8080
+  	    livenessProbe:
+  	      httpGet:
+  	        path: /
+  	        port: 8080
+  	      initialDelaySeconds: 5
+```
+
+这里主要注意我们在`spec`中声明了`replicas`为当前期望的副本数量，`selector`则是表明Rc的监控范围，`template`则是对应Pod的模板。
+
+**显然模板里的`template.metadata.labels`需要与`selector`相匹配，不然控制器将无休止的创建新Pod（新创建的Pod不在控制器的监控范围）**
+
+**不指定`selector`会是一个更好的选择，这样Kubernetes将会根据`template`中的内容自动生成标签选择器**
+
+### 使用ReplicationController
+
+在我们删除一个Rc创建的Pod时，Rc会对我们的行为作为响应，即创建一个新的Pod来满足“期望”。虽然Rc会收到我们删除Pod的消息通知，但这不是它创建新Pod的原因。这个**通知会触发控制器检查实际的Pod数量与期望值是否相同而是否需要采取措施**。
+
+##### 应对节点故障
+
+在节点发生故障之后，Kubernetes不会立即检测节点是否下线（这有可能只是瞬间的网络中断或者kubelet重启），而是在等待一段时间后才将节点标记为`NotReady`。这时候所有调度到该节点的Pod的状态将会修改为`Unknown`，这时Rc将会做出响应创建替代Pod。
+
