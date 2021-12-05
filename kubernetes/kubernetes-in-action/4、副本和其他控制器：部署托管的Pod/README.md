@@ -133,11 +133,41 @@ spec:
 
 **不指定`selector`会是一个更好的选择，这样Kubernetes将会根据`template`中的内容自动生成标签选择器**
 
-### 使用ReplicationController
+#### 使用ReplicationController
 
 在我们删除一个Rc创建的Pod时，Rc会对我们的行为作为响应，即创建一个新的Pod来满足“期望”。虽然Rc会收到我们删除Pod的消息通知，但这不是它创建新Pod的原因。这个**通知会触发控制器检查实际的Pod数量与期望值是否相同而是否需要采取措施**。
 
 ##### 应对节点故障
 
 在节点发生故障之后，Kubernetes不会立即检测节点是否下线（这有可能只是瞬间的网络中断或者kubelet重启），而是在等待一段时间后才将节点标记为`NotReady`。这时候所有调度到该节点的Pod的状态将会修改为`Unknown`，这时Rc将会做出响应创建替代Pod。
+
+##### 将Pod移出或移入ReplicationController的作用域
+
+在任何时刻，Rc管理的是与标签选择器相匹配的Pod，可以通过修改Pod的标签将它从Rc的作用域中删除或添加。
+
+**尽管Pod没有显式的绑定到Rc上，但是在被Rc管理的Pod的`metadata.ownerReferences`里会有一个字段引用着Rc，这有助于简单的找到这个Pod被哪个控制器所管理。需要注意的是，如果将一个Pod从Rc的管理中移除，响应的字段也会消失。**
+
+使用案例：如果知道某个Pod发生了故障，就可以将它从Rc的管理范围中移除，这是控制器会创建一个新的Pod以代替他，而移除的Pod就可以随意调试检查，完成后删除Pod即可。
+
+##### 修改Pod模板
+
+Rc的Pod模板可以随时修改，这并不会影响当前已存在的Pod。只有在Rc需要创建新Pod时，修改的模板才会生效。
+
+##### 水平伸缩Pod
+
+放大和缩小Pod的数量规模其实就是修改ReplicationController中的`spec.replicas`的值。我们可以使用以下几种方式进行修改
+
+```bash
+# 直接编辑yaml文件形式
+k edit rc http-whoami-rc
+
+# 使用伸缩命令形式
+k scale rc http-whoami-rc --replicas=10
+```
+
+##### 删除一个ReplicationController
+
+当通过`k delete rc ...`命令删除一个Rc时，Pod也会被一起删除，我们也可以选择通过在命令中添加`--cascade==false`做到只删除Rc而不删除Pod。
+
+我们可以使用适当的标签选择器创建新的Rc，并再次管理那些没有被一起删除的Pod。
 
