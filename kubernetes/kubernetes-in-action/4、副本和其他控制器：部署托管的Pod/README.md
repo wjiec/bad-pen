@@ -167,7 +167,7 @@ k scale rc http-whoami-rc --replicas=10
 
 ##### 删除一个ReplicationController
 
-当通过`k delete rc ...`命令删除一个Rc时，Pod也会被一起删除，我们也可以选择通过在命令中添加`--cascade==false`做到只删除Rc而不删除Pod。
+当通过`k delete rc ...`命令删除一个Rc时，Pod也会被一起删除，我们也可以选择通过在命令中添加`--cascade==orphan`做到只删除Rc而不删除Pod。
 
 我们可以使用适当的标签选择器创建新的Rc，并再次管理那些没有被一起删除的Pod。
 
