@@ -171,3 +171,55 @@ k scale rc http-whoami-rc --replicas=10
 
 我们可以使用适当的标签选择器创建新的Rc，并再次管理那些没有被一起删除的Pod。
 
+### 
+
+### 使用ReplicaSet而不是ReplicationController
+
+Kubernetes后来又引入了一个名为ReplicaSet的资源，它是新一代的ReplicationController，并且将在未来完全替换掉Rc。通常情况下我们不会直接创建Rs，而是在创建更高层级的Deployment资源时自动创建它们。
+
+#### 比较ReplicaSet和ReplicationController
+
+**ReplicaSet的行为与ReplicationController完全相同**，唯一的不同是Rs的标签选择器的表达能力更强（比如Rc无法基于是否存在标签来选择Pod，而Rs可以）。
+
+#### 定义ReplicaSet
+
+与其他所有资源一样，我们通过yaml定义Rs
+
+```yaml
+kind: ReplicaSet
+apiVersion: apps/v1
+metadta:
+  name: http-whoami-rs
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: http-whoami
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - "http-whoami"
+      - "whoami-http"
+  template:
+    metadata:
+      labels:
+        app: http-whoami
+    spec:
+      containers:
+      - name: app
+        image: http-whoami
+```
+
+以前内容与Rc最大的区别在于`spec.selector`部分，我们不直接在`selector`中直接指定标签，而是在另外的`matchLabels`和`matchExpressions`中指定。
+
+#### 使用ReplicaSet更有表达力的标签选择器
+
+Rs相对于Rc的主要改进是它更具表达力的标签选择器。我们可以通过`matchExpressions`添加额外的表达式，**每个表达式都必须包含`key`和一个`operation`（运算符），并且可能包含一个额外的`values`字段**。可用的`operation`有以下4个
+
+* `In`：表示标签的值必须匹配`values`中的任一一个
+* `NotIn`：表示标签的值与`values`中的值都不匹配
+* `Exists`：表示存在某个标签（不需指定`values`）
+* `DoesNotExists`：表示不得包含某个标签（不需指定`values`）
+
+**需要注意的是如果指定了多个表达式，则所有表达式都需要满足才可以。**
