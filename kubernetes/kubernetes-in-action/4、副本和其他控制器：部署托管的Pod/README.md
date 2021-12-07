@@ -226,3 +226,39 @@ Rs相对于Rc的主要改进是它更具表达力的标签选择器。我们可�
 
 **需要注意的是如果指定了多个表达式，则所有表达式都需要满足才可以（Rc的`selector`同样如此）。**
 
+
+
+### 使用DaemonSet在节点上运行Pod
+
+Rc和Rs都用于在Kubernetes集群上运行部署特别数量的Pod。但是在需要在集群中的每个节点上运行一些Pod用于执行系统级或与基础架构相关的操作（例如日志收集器和资源监视器）时我们可以使用DaemonSet。
+
+#### 使用DaemonSet在每个节点上运行一个Pod
+
+DaemonSet没有期望的副本数的概念，如果节点下线，DaemonSet不会在其他地方重新创建Pod。而当一个新节点加入集群是，DaemonSet会立即部署一个新的Pod实例在这个节点上。
+
+DaemonSet可以通过在Pod模板中指定`nodeSelector`的方式来选择只在部分节点上运行实例。**注意：虽然在集群中可能某些节点被设置为不可调度的，但是Daemon可以将Pod部署到这些节点上，因为不可调度这个属性只会被调度器所使用，而DaemonSet管理的Pod则完全绕过了调度器。**
+
+#### 创建一个DaemonSet
+
+与之前的所有资源一样，我们通过一个yaml文件来创建一个DaemonSet
+
+```yaml
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: ssd-monitor
+spec:
+  template:
+    metadata:
+      labels:
+        app: ssd-monitor
+    spec:
+      containers:
+      - name: app
+        image: nginx
+      nodeSelector:
+        disk: ssd
+```
+
+当我们向节点添加或者删除`disk: ssd`标签时，DaemonSet会进行相应的Pod创建和删除操作。
+
