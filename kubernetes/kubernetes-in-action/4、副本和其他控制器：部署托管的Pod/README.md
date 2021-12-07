@@ -248,6 +248,9 @@ apiVersion: apps/v1
 metadata:
   name: ssd-monitor
 spec:
+  selector:
+    matchLabels:
+      app: ssd-monitor
   template:
     metadata:
       labels:
