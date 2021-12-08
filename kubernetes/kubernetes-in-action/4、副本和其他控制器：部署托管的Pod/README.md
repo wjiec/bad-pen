@@ -265,3 +265,115 @@ spec:
 
 当我们向节点添加或者删除`disk: ssd`标签时，DaemonSet会进行相应的Pod创建和删除操作。
 
+
+
+### 运行执行单个任务的Pod
+
+ReplicationController、ReplicaSet和DaemonSet会持续运行任务，并保证Pod在意外退出后能重新启动。Kuberntes通过Job资源提供对一次性任务（进程终止后不再重新启动）的支持。如果Pod内部进程成功结束则不会重启，而当发生节点故障或者进程异常退出时，Job将会按照ReplicaSet管理Pod的方式在其他节点或者任何地方重新启动。
+
+#### 定义Job资源
+
+我们通过以下yaml内容定义一个Job资源
+
+```yaml
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: export-log
+spec:
+  template:
+    metadata:
+      labels:
+        app: export-log
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: worker
+        image: busybox
+        command: ["sleep", "120"]
+```
+
+**需要注意，Pod默认的`restartPolicy`为`Always`（表示总是会自动重启）。而在Job类型中，我们需要将其设置为`Never`或者`OnFailure`**。
+
+#### 在Job中运行多个Pod实例
+
+Job可以配置为创建多个Pod实例，我们可以以并行或者串行的方式运行它们。
+
+* `completions`：表示一共运行Pod多少次
+* `parallelism`：表示同时运行多少个Pod
+
+```yaml
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: export-log
+spec:
+  completions: 5
+  parallelism: 2
+  template:
+    metadata:
+      labels:
+        app: export-log
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: worker
+        image: busybox
+        command: ["sleep", "120"]
+```
+
+以上表示一共运行5个Pod，每次同时运行2个。
+
+#### Job的缩放
+
+类似于Rc或者Rs，我们可以使用命令行或者编辑文件的方式来修改当前的并行Pod的数量
+
+```bash
+k scale job export-log --replicas 3
+```
+
+#### 显示Job中Pod的完成时间
+
+我们可以在Pod中配置`activeDeadlineSeconds`来限制Pod的运行时间
+
+```yaml
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: export-log
+spec:
+  activeDeadlineSeconds: 1800
+```
+
+
+
+### 安排Job定期运行或者将来运行一次
+
+Kubernetes中的cron任务可以通过CrobJob资源进行配置。运行任务的时间表以linux中的crob格式指定。
+
+```yaml
+kind: CronJob
+apiVersion: batch/v1
+metadata:
+  name: sleep-every-minute
+spec:
+  schedule: "* * * * *"
+  jobTemplate:
+    metadata:
+      labels:
+        app: cronjob-sleep-every-minute
+    spec:
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: sleep-every-minute-worker
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: worker
+            image: busybox
+            command: ["sleep", "15"]
+```
+
+在以上计划时间内，CronJob资源会创建Job，然后Job会创建Pod。
