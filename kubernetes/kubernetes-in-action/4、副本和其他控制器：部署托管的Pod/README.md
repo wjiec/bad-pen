@@ -100,7 +100,13 @@ ReplicationController虽然是一个非常简单的概念，但却提供了以�
 
 #### 创建一个ReplicationController
 
-与其他资源一样，我们可以通过在一个yaml文件声明Rc的方式来创建
+我们可以通过命令行的方式创建一个ReplicationController
+
+```bash
+kubectl run http-whoami --image=http-whoami --port=8080
+```
+
+与其他资源一样，我们也可以通过在一个yaml文件声明Rc的方式来创建
 
 ```yaml
 kind: ReplicationController
