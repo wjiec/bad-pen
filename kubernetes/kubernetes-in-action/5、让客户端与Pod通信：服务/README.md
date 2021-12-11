@@ -106,3 +106,54 @@ spec:
 
 在以上yaml中，我们在Pod中命名了2个端口这样最大的好处是我们可以**随意修改Pod中的端口号而无需修改服务的相关属性**。
 
+
+
+### 服务发现
+
+Kubernetes为客户端提供了发现服务的IP地址和端口的方式。
+
+#### 通过环境变量发现服务
+
+在Pod开始运行的时候，Kubernetes会初始化一系列的环境变量指向现在存在的服务（需要服务在Pod创建前就已经存在），如下
+
+```bash
+KUBERNETES_PORT=tcp://10.96.0.1:443
+KUBERNETES_SERVICE_HOST=10.96.0.1
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_SERVICE_PORT_HTTPS=443
+KUBERNETES_PORT_443_TCP=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+
+HTTP_WHOAMI_PORT=tcp://10.96.196.76:80
+HTTP_WHOAMI_SERVICE_HOST=10.96.196.76
+HTTP_WHOAMI_SERVICE_PORT=80
+HTTP_WHOAMI_SERVICE_PORT_HTTP=80
+HTTP_WHOAMI_PORT_80_TCP=tcp://10.96.196.76:80
+HTTP_WHOAMI_PORT_80_TCP_ADDR=10.96.196.76
+HTTP_WHOAMI_PORT_80_TCP_PORT=80
+HTTP_WHOAMI_PORT_80_TCP_PROTO=tcp
+```
+
+**需要注意的是服务名称中的横杠被转换为下划线，并且当服务名称作为环境变量名称的前缀时，所有的字母都是大写的**
+
+#### 通过DNS发现服务
+
+在kube-system命名空间下有一个名为kube-dns的Pod，这个Pod运行DNS服务，在集群中的其他Pod的都会将它作为DNS（通过`/etc/resolve.conf`实现）。运行在Pod中的进程在进行DNS查询时都会被Kubernetes自身的DNS服务器响应，该服务知道系统中运行的所有服务。
+
+#### 通过FQDN连接服务
+
+在Pod中我们可以通过`FQDN`（全限定域名）访问某一个指定的服务（在这种情况下任需要提供端口，但是可以从环境变量中获取）。
+
+```
+SVCNAME.NAMESPACE.svc.cluster.local
+```
+
+如果客户端Pod与服务端Pod处于同一命名空间，我们可以直接省略`.svc.cluser.local`后缀，甚至可以省略命名空间段。我们可以在一个已经启动的Pod容器中通过`curl`命令使用FQDN来访问服务。
+
+```bash
+k exec -ti busybox sh
+```
+
+**需要注意的是，我们无法ping到这个服务指向的IP，这是因为服务的集群IP是一个虚拟IP，这个IP只有在于服务端口结合时才有意义。**
