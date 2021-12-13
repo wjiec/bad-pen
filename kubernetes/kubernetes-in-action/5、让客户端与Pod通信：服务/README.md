@@ -157,3 +157,60 @@ k exec -ti busybox sh
 ```
 
 **需要注意的是，我们无法ping到这个服务指向的IP，这是因为服务的集群IP是一个虚拟IP，这个IP只有在于服务端口结合时才有意义。**
+
+
+
+### 连接集群外部的服务
+
+Kubernetes可以通过Service的服务特性暴露外部服务（服务将被重定向到集群外的IP，而不是重定向到内部IP），这样可以充分利用服务（指Kubernetes的Service资源）的负载均衡和服务发现能力。
+
+#### 服务Endpoint
+
+服务并不是直接与Pod相连的，而是由Endpoint资源介于两者之间。Endpoint资源就是暴露一个服务的IP地址和端口的列表，Endpoint资源和其他Kubernetes资源一样，可以通过`k get|describe`来获取它的基本信息。
+
+**注意：在服务中定义的`spec.selector`选择器不是在重定向时使用的，而是用于构建IP和端口，然后存储于Endpoint资源中。当客户端发起连接请求时，服务代理程序从Endpoint的IP地址和端口列表中选择一个将其作为重定向的目标。**
+
+#### 手动配置Endpoint
+
+如果我们在创建服务时不指定Pod选择器，Kubernetes将不会创建Endpoint资源。Endpoint是一个单独的资源并不是服务的一个属性，而且Endpoint需要与服务具有相同的名字，并包含该服务的目标IP地址和端口列表
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami
+spec:
+  ports:
+  - port: 80
+---
+kind: Endpoint
+apiVersion: v1
+metadata:
+  name: http-whoami
+subsets:
+  - addresses:
+    - ip: 172.16.0.1
+    - ip: 172.16.0.6
+    ports:
+    - port: 80
+```
+
+#### 为外部服务创建别名
+
+除了手动配置服务的Endpoint来代替公开外部服务之外，我们还可以通过完全限定域名来访问外部服务。要使用这种类型的服务，我们需要指定服务的类型为`ExternalName`，并在`externalName`中使用完全限定域名来指定目标。
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: search-engine
+spec:
+  type: ExternalName
+  externalName: bing.com
+  ports:
+  - port: 80
+```
+
+服务创建完成之后，Pod就可以通过`search-engine.default.svc.cluster.local`（或者`search-engine`）来访问外部服务。通过这个方法我们隐藏了实际的服务名称，并且允许服务在之后将其修改为指向其他位置的服务，或者是修改回`ClusterIP`类型并制定Pod选择器，甚至可以是手动创建的Endpoint。
+
+**注意：在使用`ExternalName`类型时，DNS将通过新增一条CNAME记录的方式来重定向连接。这时候客户端将直接连接到外部服务，并将完全绕过服务代理。**

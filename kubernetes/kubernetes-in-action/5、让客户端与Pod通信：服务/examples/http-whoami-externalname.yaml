@@ -1,0 +1,10 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami
+spec:
+  type: ExternalName
+  externalName: dns.hasakk.com
+  ports:
+  - port: 80
+
