@@ -214,3 +214,81 @@ spec:
 服务创建完成之后，Pod就可以通过`search-engine.default.svc.cluster.local`（或者`search-engine`）来访问外部服务。通过这个方法我们隐藏了实际的服务名称，并且允许服务在之后将其修改为指向其他位置的服务，或者是修改回`ClusterIP`类型并制定Pod选择器，甚至可以是手动创建的Endpoint。
 
 **注意：在使用`ExternalName`类型时，DNS将通过新增一条CNAME记录的方式来重定向连接。这时候客户端将直接连接到外部服务，并将完全绕过服务代理。**
+
+
+
+### 将服务暴露给外部客户端
+
+当我们需要向外部暴露公开某些服务时，我们有以下几种方式可选：
+
+* 将服务的类型设置为`NodePort`：Kubernetes会在集群的每个节点上打开一个端口（可指定或不指定），任一节点上该端口的访问的连接将会被路由到Pod中。
+* 将服务的类型设置为`LoadBalance`：相当于在`NodePort`基础上再套一层负载均衡（由服务商提供，当不存在时表现和`NodePort`一致）
+* 创建一个`Ingress`资源，这是构建于应用层之上的路由（根据协议进行路由具体的Pod）
+
+#### 使用NodePort类型的服务
+
+NodePort类型的服务可以让Kubernetes在集群的所有节点上打开一个端口（所有节点使用相同的端口号），并将所有节点上的连接转发给具体的Pod。
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami-np
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 8080
+    nodePort: 30123
+  selector:
+    app: http-whoami
+```
+
+**注意：`spec.ports.nodePort`并不是强制的，如果没有这个字段，Kubernetes将随机选择一个端口**
+
+在这种情况下如果我们只在配置文件中配置某一个节点的端口地址（`node1:30123`）这又回到了最初的样子。**如果该节点意外宕机后将无法再通过node1访问到该服务**
+
+#### 通过负载均衡器将服务暴露出来
+
+为了解决上述NodePort的问题，Kubernetes支持从云基础服务商那里自动获取一个负载均衡器（由这个负载均衡选择一个NodePort进行访问）。而我们需要做的仅仅是将服务的类型修改为`LoadBalance`。
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami-np
+spec:
+  type: LoadBalance
+  ports:
+  - port: 80
+    targetPort: 8080
+#    nodePort: 30123
+  selector:
+    app: http-whoami
+```
+
+**注意：如果Kubernetes在不支持LoadBalance服务的环境中运行，则不会有创建负载均衡器的操作，这种情况下LoadBalance与NodePort的表现是一致的。**所以这就是为什么说“LoadBalance服务是NodePort服务的扩展”的原因。、
+
+#### 外部连接的一些特性
+
+在NodePort服务环境下，当客户端连接到达某一节点时，连接将被随机转发到其他（或本地）的Pod上。如果连接被转发到其他节点的Pod上将会增加额外的网络跳数，并且会**因为发生了SNAT导致丢失原始连接的客户端IP和端口信息**。
+
+为了防止这种情况出现我们可以配置`spec.externalTrafficPolicy`的值为`Local`来解决这个问题
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami-np
+spec:
+  type: LoadBalance
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: http-whoami
+  externalTrafficPolicy: Local
+```
+
+**注意：当配置该属性值为Local时，如果当前节点上并没有对于的Pod运行那么客户端的连接将被挂起**
+
