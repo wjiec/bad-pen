@@ -250,7 +250,7 @@ spec:
 
 #### 通过负载均衡器将服务暴露出来
 
-为了解决上述NodePort的问题，Kubernetes支持从云基础服务商那里自动获取一个负载均衡器（由这个负载均衡选择一个NodePort进行访问）。而我们需要做的仅仅是将服务的类型修改为`LoadBalance`。
+为了解决上述NodePort的问题，Kubernetes支持从云基础服务商那里自动获取一个负载均衡器（由这个负载均衡选择一个NodePort进行访问）。而我们需要做的仅仅是将服务的类型修改为`LoadBalancer`。
 
 ```yaml
 kind: Service
@@ -258,7 +258,7 @@ apiVersion: v1
 metadata:
   name: http-whoami-np
 spec:
-  type: LoadBalance
+  type: LoadBalancer
   ports:
   - port: 80
     targetPort: 8080
@@ -267,7 +267,7 @@ spec:
     app: http-whoami
 ```
 
-**注意：如果Kubernetes在不支持LoadBalance服务的环境中运行，则不会有创建负载均衡器的操作，这种情况下LoadBalance与NodePort的表现是一致的。**所以这就是为什么说“LoadBalance服务是NodePort服务的扩展”的原因。、
+**注意：如果Kubernetes在不支持LoadBalancer服务的环境中运行，则不会有创建负载均衡器的操作，这种情况下LoadBalancer与NodePort的表现是一致的。**所以这就是为什么说“LoadBalancer服务是NodePort服务的扩展”的原因。、
 
 #### 外部连接的一些特性
 
@@ -281,7 +281,7 @@ apiVersion: v1
 metadata:
   name: http-whoami-np
 spec:
-  type: LoadBalance
+  type: LoadBalancer
   ports:
   - port: 80
     targetPort: 8080
@@ -291,4 +291,39 @@ spec:
 ```
 
 **注意：当配置该属性值为Local时，如果当前节点上并没有对于的Pod运行那么客户端的连接将被挂起**
+
+
+
+### 通过Ingress暴露服务
+
+> Ingress（名词）—— 进入或进入的行为；进入的权利；进入的手段或地点；入口。
+
+#### 为什么需要Ingress
+
+一个重要的原因是每个LoadBalancer服务都需要自己的负载均衡器以及独有的公有IP地址，而Ingress只需要一个公网IP地址就能为很多服务提供访问（Ingress会根据请求的主机名和路径决定将请求转发给哪个服务）
+
+Ingress在应用层（HTTP）之上执行操作（也可以工作在传输层上进行tcp/udp代理），并且可以提供一些服务不能实现的功能（实现基于cookie的会话亲和性）
+
+#### 创建Ingress资源
+
+**需要注意的是，如果需要使用Ingress资源，则Kubernetes中必须有Ingress控制器在运行**
+
+```yaml
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: http-whoami
+spec:
+  rules:
+  - host: http-whoami.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: http-whoami
+            port:
+              name: http
+```
 
