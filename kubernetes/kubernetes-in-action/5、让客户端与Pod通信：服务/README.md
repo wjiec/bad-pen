@@ -476,3 +476,61 @@ spec:
 
 ### 使用Headless服务来发现独立的Pod
 
+客户端将会通过服务随机地连接到一个Pod上，如果需要同时连接所有的Pod，一种选择是让客户端通过Kubernetes API获取相应的Pod及其IP列表。同时Kubernetes允许客户端通过DNS发现所有的Pod的IP。
+
+在创建headless服务时，Kubernetes将会在DNS中**为这个服务创建多个A记录指向每个就绪的Pod**。
+
+#### 创建Headless服务
+
+当创建一个服务时，如果告诉Kubernets不需要提供集群IP（配置`spec.clusterIP`字段为`None`），则DNS会返回所有的Pod IP而不是单个服务IP。
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami-headless
+spec:
+  clusterIP: None
+  selector:
+    app: http-whoami
+```
+
+#### 通过DNS发现Pod
+
+我们可以在一个Pod容器中通过`nslookup`或者`dig`进行查询。尽管headless服务看起来与常规的服务不同，但是在客户端的视角上是一样的，区别只是DNS返回了Pod的IP地址，**客户端将会直接连接到Pod上，而不会通过服务进行代理**。
+
+**注意：headless服务任然提供跨pod的负载均衡，但是是通过基于DNS轮询的机制而不是通过服务代理。**
+
+#### 发现所有Pod（包括未就绪的）
+
+只有就绪的Pod才可以成为服务的后端，但是我们也可以将未就绪的Pod加入发现的列表。我们只需要告诉Kubernetes无论Pod是否准备就绪都添加到服务中
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami-headless
+spec:
+  clusterIP: None
+  selector:
+    app: http-whoami
+  publishNotReadyAddresses: true
+```
+
+
+
+### 排除服务故障
+
+如果无法通过服务访问Pod，可以根据下面的列表进行排查：
+
+* 确保从集群内连接到服务的集群IP，而不是从外部
+* 不要通过ping服务IP的方式来判断服务是否可访问（集群IP是个虚拟IP，是无法ping通的）
+* 如果定义了就绪探针，确保就绪探针返回成功
+* 确定容器是服务的一部分，通过`jubectl get ep`检查
+* 通过FQDN或者其中一部分域名来访问服务不起作用的，请查看是否可以使用集群IP访问
+* 检查是否连接到服务的开放端口，而不是目标端口（`port`和`targetPort`）
+* 尝试直接连接Pod的IP以确认Pod可以正常工作
+* 如果无法通过Pod的IP访问，确保应用正确启动了且绑定到`0.0.0.0`上
+
+可以查看该文件获得完整流程[troubleshooting-kubernetes](../../troubleshooting-kubernetes.zh_cn.v2.pdf)
+
