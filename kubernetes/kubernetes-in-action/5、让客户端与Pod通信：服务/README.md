@@ -327,3 +327,152 @@ spec:
               name: http
 ```
 
+#### 通过Ingress访问服务
+
+我们根据配置文件所定义的域名，通过curl发起请求进行测试
+
+```bash
+curl -vvv -H 'Host: http-whoami.example.com' http://localhost
+```
+
+#### Ingress的工作原理
+
+客户端首先进行DNS查询获取到Ingress控制器的IP地址，然后像控制器发起请求，并在Host头中指定想要访问的域名，而控制器根据这个头部确定与之对应的服务，并读取服务中的Endpoints并从中选择一个Pod，然后将请求转发过去。
+
+**注意：Ingress控制器并不会将请求转发给服务，只是用它来选择一个Pod。**
+
+#### 在一个Ingress中暴露多个服务
+
+由于Ingress定义中`rules`和`paths`都是数组，所以我们可以在一个Ingress中声明多个域名和多个路径暴露多个服务
+
+```yaml
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: multi-service
+spec:
+  rules:
+    - host: foo.example.com
+      http:
+        paths:
+          - path: /order
+            backend:
+              service:
+                name: order-service
+                port:
+                  name: http
+          - path: /user
+            backend:
+              service:
+                name: user-service
+                port:
+                  name: http
+    - host: bar.example.com
+      http:
+        paths:
+          - path: /product
+            backend:
+              service:
+                name: product-service
+                port:
+                  name: http
+          - path: /notification
+            backend:
+              service:
+                name: notification-service
+                port:
+                  name: http
+```
+
+控制器可以根据URL中的路径将其转发到不同的服务里，也可以根据请求的域名来转发到不同的服务。
+
+#### 配置Ingress处理TLS传输
+
+要使控制器能处理TLS请求，我们需要把证书保存要Secret中
+
+```bash
+openssl genrsa -out server.key 2048
+openssl req -new -x509 -key server.key -out server.crt -days 3650 -subj /CN=http-whoami.example.com
+
+kubectl create secret tls http-whoami-tls --cert=server.crt --key=server.key
+```
+
+然后在Ingress中引用它
+
+```yaml
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: http-whoami
+  labels:
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - http-whoami.example.com
+      secretName: http-whoami-tls
+  rules:
+  - host: http-whoami.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: http-whoami
+            port:
+              name: http
+```
+
+最后我们可以通过curl去验证
+
+```bash
+curl -vvv -kH 'Host: http-whoami.example.com' https://localhost
+```
+
+
+
+### 使用就绪探针
+
+只要创建了适当的Pod，那这个Pod几乎立即会成为服务的一部分，并且请求开始呗代理到这个Pod。如果这个Pod需要长时间来加载配置或者数据，那么用户将会请求失败。
+
+#### 介绍就绪探针
+
+与存活探针类似，**Kubernetes还允许为容器定义就绪探针**。就绪探针会被定期调用以确定Pod是否还可以接收客户端请求。就绪探针的类型与存活探针一样有Exec（执行命令）、HttpGet（执行GET请求）和TCP Socket（打开一个连接）。**如果某个Pod还没有准备就绪，则会从服务中删除该Pod，一旦Pod准备就绪，服务就会重新添加Pod**。
+
+**注意：如果Pod未通过就绪检查，Kubernetes并不会终止和重启启动Pod（存活探针会）。**
+
+#### 向Pod添加就绪探针
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami-readiness
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      livenessProbe:
+        httpGet:
+          port: http
+          path: /
+      readinessProbe:
+        httpGet:
+          port: http
+          path: /
+      ports:
+        - name: http
+          containerPort: 8080
+```
+
+#### 就绪探针的实际作用
+
+就绪探针的返回值决定了应用程序是否已经准备好接受客户端的请求。**应该始终为应用定义就绪探针，即使就绪探针只是向发出一个URL请求。**
+
+对于删除/关闭Pod情况下，如果“**Pod收到关闭信号就让就绪探针返回失败**”这**并不是必须**的，因为**一旦Pod被删除，Kubernetes就会从所有服务中移除这个Pod**。
+
+
+
+### 使用Headless服务来发现独立的Pod
+
