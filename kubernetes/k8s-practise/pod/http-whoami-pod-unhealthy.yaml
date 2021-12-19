@@ -1,0 +1,16 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami-unhealthy
+spec:
+  containers:
+  - name: app
+    image: laboys/http-whoami
+    env:
+    - name: SERVICE_HEALTHY_COUNT
+      value: "5"
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 8080
+      initialDelaySeconds: 5

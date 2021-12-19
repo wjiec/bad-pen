@@ -1,0 +1,19 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: ssd-monitor
+spec:
+  selector:
+    matchLabels:
+      app: ssd-monitor
+  template:
+    metadata:
+      labels:
+        app: ssd-monitor
+        rel: develop
+    spec:
+      containers:
+      - name: app
+        image: laboys/http-whoami
+      nodeSelector:
+        disk: ssd

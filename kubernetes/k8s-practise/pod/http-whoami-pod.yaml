@@ -1,0 +1,15 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami
+  labels:
+    app: http-whoami
+  annotations:
+    laboys.io/creator: jayson
+spec:
+  containers:
+  - name: app
+    image: laboys/http-whoami
+    ports:
+      - containerPort: 8080
+        protocol: TCP

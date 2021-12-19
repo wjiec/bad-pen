@@ -1,0 +1,18 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami
+spec:
+  ports:
+  - port: 80
+---
+kind: Endpoints
+apiVersion: v1
+metadata:
+  name: http-whoami
+subsets:
+  - addresses:
+    - ip: 172.16.0.1
+    - ip: 172.16.0.6
+    ports:
+    - port: 80

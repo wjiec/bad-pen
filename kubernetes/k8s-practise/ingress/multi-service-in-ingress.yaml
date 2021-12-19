@@ -1,0 +1,36 @@
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: multi-service
+spec:
+  rules:
+    - host: foo.example.com
+      http:
+        paths:
+          - path: /order
+            backend:
+              service:
+                name: order-service
+                port:
+                  name: http
+          - path: /user
+            backend:
+              service:
+                name: user-service
+                port:
+                  name: http
+    - host: bar.example.com
+      http:
+        paths:
+          - path: /product
+            backend:
+              service:
+                name: product-service
+                port:
+                  name: http
+          - path: /notification
+            backend:
+              service:
+                name: notification-service
+                port:
+                  name: http

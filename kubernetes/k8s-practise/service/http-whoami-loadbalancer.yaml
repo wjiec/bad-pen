@@ -1,0 +1,12 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami-np
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    nodePort: 30123
+  selector:
+    app: http-whoami

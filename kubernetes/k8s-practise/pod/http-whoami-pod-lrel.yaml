@@ -1,0 +1,10 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami-lrel
+  labels:
+    rel: develop
+spec:
+  containers:
+  - name: app
+    image: laboys/http-whoami

@@ -1,0 +1,12 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: ssd-monitor-mock
+  labels:
+    app: ssd-monitor
+spec:
+  containers:
+  - name: app
+    image: laboys/http-whoami
+  nodeSelector:
+    disk: ssd

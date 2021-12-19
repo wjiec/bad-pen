@@ -1,0 +1,22 @@
+kind: ReplicationController
+apiVersion: v1
+metadata:
+  name: http-whoami-rc
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: http-whoami
+    spec:
+      containers:
+      - name: app
+        image: registry.cn-hangzhou.aliyuncs.com/laboys/http-whoami
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            port: 8080
+            path: /
+          initialDelaySeconds: 5
+

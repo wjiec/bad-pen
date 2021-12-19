@@ -1,0 +1,10 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami-lapp
+  labels:
+    app: http-whoami
+spec:
+  containers:
+  - name: app
+    image: laboys/http-whoami

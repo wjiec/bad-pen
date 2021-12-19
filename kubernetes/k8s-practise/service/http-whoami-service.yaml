@@ -1,0 +1,38 @@
+kind: ReplicaSet
+apiVersion: apps/v1
+metadata:
+  name: http-whoami-rs
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: http-whoami
+  template:
+    metadata:
+      labels:
+        app: http-whoami
+    spec:
+      containers:
+      - name: app
+        image: registry.cn-hangzhou.aliyuncs.com/laboys/http-whoami
+        ports:
+        - name: http
+          protocol: TCP
+          containerPort: 8080
+        livenessProbe:
+          httpGet:
+            port: http
+            path: /
+          initialDelaySeconds: 5
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-whoami
+spec:
+  selector:
+    app: http-whoami
+  ports:
+  - name: http
+    port: 80
+    targetPort: http

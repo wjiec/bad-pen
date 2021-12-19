@@ -1,0 +1,24 @@
+kind: ReplicaSet
+apiVersion: apps/v1
+metadata:
+  name: http-whoami-rs
+spec:
+  replicas: 3
+  selector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - "http-whoami"
+      - "whoami-http"
+    - key: rel
+      operator: Exists
+  template:
+    metadata:
+      labels:
+        app: http-whoami
+        rel: development
+    spec:
+      containers:
+      - name: app
+        image: laboys/http-whoami

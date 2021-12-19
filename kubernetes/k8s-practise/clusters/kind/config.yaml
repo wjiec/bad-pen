@@ -1,0 +1,63 @@
+# see https://pkg.go.dev/sigs.k8s.io/kind/pkg/apis/config/v1alpha4#Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+# the cluster name
+name: pilot
+# contains cluster wide network settings
+networking:
+  # defines if kube-proxy should operate in ipvs mode
+  kubeProxyMode: ipvs
+# applied to the generated kubeadm config as merge patches
+# cluster-level patches are applied before the node-level patches
+kubeadmConfigPatches:
+- |
+  # see https://pkg.go.dev/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3#ClusterConfiguration
+  kind: ClusterConfiguration
+  # sets the container registry to pull images from
+  # default: k8s.gcr.io
+  imageRepository: registry.aliyuncs.com/google_containers
+
+# contains the list of nodes defined in the `kind` Cluster
+# if unset this will default to a single control-plane node
+# if more than one control plane is specified, an external
+# control plane load balancer will be provisioned implicitly
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+    - |
+      # https://pkg.go.dev/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3#InitConfiguration
+      kind: InitConfiguration
+      nodeRegistration:
+        name: sun
+        kubeletExtraArgs:
+          node-labels: "ingress-ready=true"
+    extraMounts:
+    - containerPath: /var/lib/kubelet/config.json
+      hostPath: /root/.docker/config.json
+    extraPortMappings:
+    - containerPort: 30080
+      hostPort: 80
+      protocol: TCP
+    - containerPort: 30443
+      hostPort: 443
+      protocol: TCP
+  - role: worker
+    kubeadmConfigPatches:
+    - |
+      # https://pkg.go.dev/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3#JoinConfiguration
+      kind: JoinConfiguration
+      nodeRegistration:
+        name: mercury
+    extraMounts:
+    - containerPath: /var/lib/kubelet/config.json
+      hostPath: /root/.docker/config.json
+  - role: worker
+    kubeadmConfigPatches:
+    - |
+      # https://pkg.go.dev/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3#JoinConfiguration
+      kind: JoinConfiguration
+      nodeRegistration:
+        name: venus
+    extraMounts:
+    - containerPath: /var/lib/kubelet/config.json
+      hostPath: /root/.docker/config.json

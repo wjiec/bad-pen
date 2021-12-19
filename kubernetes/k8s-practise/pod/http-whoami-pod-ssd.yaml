@@ -1,0 +1,16 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami-ssd
+  labels:
+    app: http-whoami
+spec:
+  nodeSelector:
+    disk: ssd
+  containers:
+  - name: app
+    image: laboys/http-whoami:latest
+    ports:
+      - containerPort: 8080
+        protocol: TCP
+

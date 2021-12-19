@@ -1,0 +1,21 @@
+kind: CronJob
+apiVersion: batch/v1
+metadata:
+  name: sleep-every-minute
+spec:
+  schedule: "* * * * *"
+  jobTemplate:
+    metadata:
+      labels:
+        job: sleep-every-minute
+    spec:
+      template:
+        metadata:
+          labels:
+            app: sleep-every-minute-worker
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: worker
+            image: busybox
+            command: ["sleep", "15"]

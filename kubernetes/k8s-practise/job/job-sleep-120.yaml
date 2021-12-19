@@ -1,0 +1,18 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: export-log
+spec:
+  completions: 5
+  parallelism: 2
+  template:
+    metadata:
+      labels:
+        app: export-log
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: worker
+        image: busybox
+        command: ["sleep", "120"]
+

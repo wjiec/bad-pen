@@ -1,0 +1,19 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami-readiness
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      livenessProbe:
+        httpGet:
+          port: http
+          path: /
+      readinessProbe:
+        httpGet:
+          port: http
+          path: /
+      ports:
+        - name: http
+          containerPort: 8080
