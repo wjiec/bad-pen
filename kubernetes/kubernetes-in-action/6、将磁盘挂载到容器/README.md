@@ -26,3 +26,50 @@ Pod类似于逻辑主机，逻辑主机中运行的程序共享CPU、内存、�
 
 单个容器可以同时使用不同类型的多个卷，每个容器也可以选择装载或者不装载卷。
 
+
+
+### 通过卷在容器之间共享数据
+
+卷最简单的用法是用法是在一个Pod的多个容器之间共享数据
+
+#### 使用emptyDir卷
+
+最简单的卷类型是`emptyDir`卷。顾名思义，empty卷从一个空目录开始，运行在Pod内的应用程序可以写入它需要的任何文件。因为卷的生命周期和Pod的生命周期相关联，所以当删除Pod时，卷的内容也会丢失。
+
+**emptyDir卷对于在同一个Pod中运行的容器之间共享文件特别有用**
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: volume-emptydir
+spec:
+  containers:
+    - name: web-server
+      image: nginx
+      volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      ports:
+        - name: http
+          containerPort: 80
+    - name: blabber
+      image: laboys/fortune
+      volumeMounts:
+        - name: html
+          mountPath: /var/www
+  volumes:
+    - name: html
+      emptyDir:
+        sizeLimit: 16Mi
+        #medium: Memory
+```
+
+emptyDir卷是在Pod所在节点的磁盘上创建的，因此其性能取决于节点的磁盘性能。但是我们可以通过修改字段`medium = Memory`来让Kubernetes在内存中创建卷。
+
+emptyDir卷是最简单的卷类型，其他类型的卷都是在它基础上构建的（创建空目录之后再用数据填充它）。
+
+
+
+### 访问工作节点文件系统上的文件
+

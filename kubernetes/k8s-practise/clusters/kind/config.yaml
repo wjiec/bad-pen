@@ -6,16 +6,16 @@ name: pilot
 # contains cluster wide network settings
 networking:
   # defines if kube-proxy should operate in ipvs mode
-  kubeProxyMode: ipvs
+  kubeProxyMode: iptables
 # applied to the generated kubeadm config as merge patches
 # cluster-level patches are applied before the node-level patches
-kubeadmConfigPatches:
-- |
-  # see https://pkg.go.dev/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3#ClusterConfiguration
-  kind: ClusterConfiguration
-  # sets the container registry to pull images from
-  # default: k8s.gcr.io
-  imageRepository: registry.aliyuncs.com/google_containers
+#kubeadmConfigPatches:
+#- |
+#  # see https://pkg.go.dev/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3#ClusterConfiguration
+#  kind: ClusterConfiguration
+#  # sets the container registry to pull images from
+#  # default: k8s.gcr.io
+#  imageRepository: registry.aliyuncs.com/google_containers
 
 # contains the list of nodes defined in the `kind` Cluster
 # if unset this will default to a single control-plane node

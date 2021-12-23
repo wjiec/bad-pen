@@ -1,0 +1,9 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: dnsutils
+spec:
+  containers:
+    - name: app
+      image: tutum/dnsutils
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]

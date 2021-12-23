@@ -1,0 +1,37 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: emptydir-fortune
+  labels:
+    app.kubernetes.io/name: emptydir-fortune
+spec:
+  containers:
+    - name: web-server
+      image: nginx
+      volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      ports:
+        - name: http
+          containerPort: 80
+    - name: blabber
+      image: laboys/fortune
+      volumeMounts:
+        - name: html
+          mountPath: /var/www
+  volumes:
+    - name: html
+      emptyDir:
+        sizeLimit: 16Mi
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: emptydir-fortune
+spec:
+  selector:
+    app.kubernetes.io/name: emptydir-fortune
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

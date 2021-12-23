@@ -1,0 +1,24 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: emptydir-memory-fortune
+spec:
+  containers:
+    - name: web-server
+      image: nginx
+      volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      ports:
+        - name: http
+          containerPort: 80
+    - name: blabber
+      image: laboys/fortune
+      volumeMounts:
+        - name: html
+          mountPath: /var/www
+  volumes:
+    - name: html
+      emptyDir:
+        sizeLimit: 16Mi
+        medium: Memory
