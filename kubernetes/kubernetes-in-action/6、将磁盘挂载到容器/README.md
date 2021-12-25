@@ -73,3 +73,62 @@ emptyDir卷是最简单的卷类型，其他类型的卷都是在它基础上构
 
 ### 访问工作节点文件系统上的文件
 
+某些系统级别的Pod（通常是由DaemonSet启动）确实需要读取节点的文件或者使用节点的文件系统来访问节点设备。Kubernetes通过`hostPath`卷来实现这一点。
+
+hostPath卷指向节点文件系统上的特定文件或目录。在同一个节点上运行并在hostPath卷中使用相同主机路径的Pod可以看到相同的文件。
+
+hostPath卷的内容不会随着Pod被删除时被删除，如果删除了一个Pod，并且下一个Pod（前提是在相同的工作节点上）的hostPath卷使用了相同的主机路径的话，新Pod可以看到上一个Pod留下的数据。
+
+#### 创建和查看hostPath卷
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: hostpath-certs
+spec:
+  containers:
+    - name: app
+      image: alpine
+      volumeMounts:
+        - name: certs
+          mountPath: /certs
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+  volumes:
+    - name: certs
+      hostPath:
+        path: /etc/ssl/certs
+```
+
+大多数情况下会使用hostPath卷来分节点的日志文件、kubeconfig或CA证书。
+
+**注意：当且仅当需要在节点上读取或写入系统文件时才使用hostPath，切勿使用它们来持久化跨Pod的数据**
+
+
+
+### 使用持久化存储
+
+当运行在Pod中的应用程序（MySQL，ElasticSearch等）需要将数据保存到磁盘上，并且即使该Pod重新调度到另一个节点上时也要求具有相同的数据可用，因此我们必须将文件存储到某种类型的网络存储中。
+
+#### 通过底层持久化存储使用卷
+
+根据不同的基础设施（Aliyun，AWS，Azure）使用不同类型的卷，比如在Amazon上应该使用awsElasticBlockStore来提供持久化存储，如果在Azure上运行，则可以使用azureFile或者azureDisk。
+
+如果集群是运行在自有的一组服务器上，那么就有大量其他可一直的选项用于在卷内挂载外部存储。比如可以使用NFS共享来作为卷
+
+```yaml
+volumes:
+  - name: database
+    nfs:
+      server: 1.2.3.4
+      path: /share/path
+```
+
+支持的其他选项有iscsi（挂载ISCSI磁盘资源）、glusterfs（挂载GlusterFS）、rdp（适用于RADOS块设备），还有更多的flexVolume、cinder、cephfs、flocker、fc（光纤通道）等等。
+
+**但是，将这种涉及基础设施类型的信息塞到一个Pod设置中，意味着Pod设置与特定的Kubernetes集群有更大的耦合度。这样就不能在另一个Pod中使用相同的配置了。**
+
+
+
+### 从底层存储技术解耦Pod
+
