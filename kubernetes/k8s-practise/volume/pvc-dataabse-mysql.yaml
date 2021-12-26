@@ -1,0 +1,20 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pvc-database-mysql
+spec:
+  containers:
+    - name: app
+      image: alpine
+      ports:
+        - name: mysql
+          containerPort: 3306
+          protocol: TCP
+      volumeMounts:
+        - name: database
+          mountPath: /database
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+  volumes:
+    - name: database
+      persistentVolumeClaim:
+        claimName: database-pvc

@@ -1,0 +1,16 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: hostpath-certs
+spec:
+  containers:
+    - name: app
+      image: alpine
+      volumeMounts:
+        - name: certs
+          mountPath: /certs
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+  volumes:
+    - name: certs
+      hostPath:
+        path: /etc/ssl/certs
