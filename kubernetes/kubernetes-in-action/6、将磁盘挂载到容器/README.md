@@ -132,3 +132,105 @@ volumes:
 
 ### 从底层存储技术解耦Pod
 
+在Kubernetes集群中为了使应用能够正常请求存储资源，同时避免处理基础设施细节，Kubernetes引入了**持久卷**和**持久卷声明**。研发人员无需向他们的Pod中添加特定技术的卷，而是**由集群管理员设置底层存储然后通过Kubernetes API创建持久卷**并注册（在创建持久卷时，管理员可以指定其大小和所支持的访问模式）。
+
+当集群用户需要在Pod中使用持久化存储时，他们需要**先创建持久卷声明**（PersistentVolumeClain，简称PVC），**指定所需要的最低容量要求和访问模式**，然后用户将PVC提交给Kubernets，如果能**找到可匹配的持久卷（PV）那么就将其绑定到持久卷声明（PVC）中**。
+
+持久卷声明（PVC）可以当做Pod中的一个卷使用，其他用户不能使用相同的持久卷（PV），除非像通过删除持久卷声明（PVC）来释放持久卷（PV）
+
+#### 创建持久卷（PV）
+
+可以使用之前设置Pod中Volume的所有方式来创建持久卷（PV）
+
+```yaml
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pv-retain-data
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /tmp/pv-retain
+```
+
+在创建PV时需要告诉Kubernetes对应的容量，以及是否可以由单个节点或者多个节点同时读取或写入。管理员还需要告诉Kubernetes如何处理持久卷（PV）在持久卷声明（PVC）被删除之后的处理方式（`persistentVolumeReclaimPolicy`）。
+
+* `Retain`：在**对应的PVC删除之后，不删除卷（`Released`状态），并且无法再次被PVC再次使用**
+* `Delete`：**在对应PVC删除是同步删除卷，但是卷内的文件不会被删除**
+
+**注意：持久卷不属于任何命名空间，它和节点一样是集群层面的资源。**
+
+#### 通过持久卷声明来获取持久卷
+
+当我们需要部署一个需要持久化存储的Pod时，我们可以用到之前创建的持久卷，但是我们不能直接在Pod中使用，需要先声明一个。声明一个持久卷和创建一个Pod是相对独立的过程（即使Pod被重新调度，我们也希望通过相同的持久卷声明来确保可用）。
+
+```yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: database-pvc
+spec:
+  resources:
+    requests:
+      storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+```
+
+当创建声明（PVC）时，Kubernetes会找到适当的持久卷（PV）并将其绑定到持久卷声明（PVC）上。持久卷（PV）的容量必须足够大以满足声明的需求，并且卷的访问模式必须包含声明中的访问模式。访问模式与其对应的缩写如下
+
+* `ReadWriteOnce(RWO)`：仅允许单个**节点**挂载读写
+* `ReadOnlyMany(ROX)`：允许多个**节点**挂载只读
+* `ReadWriteMany(RWX)`：允许多个**节点**挂载读写
+
+**注意：`RWO,ROX,RWX`涉及可以同时使用卷的工作节点的数量而并非Pod的数量**
+
+持久卷是集群范围，因此不能在特定的命名空间中创建，但是持久卷声明又只能在特定的命名空间使用，所以持久卷和持久卷声明只能被同一个命名空间内的Pod创建使用。
+
+#### 在Pod中使用持久卷声明
+
+持久卷现在已经可用了，除非先释放掉卷，否则没有人可以声明相同的卷。在Pod中使用持久卷的方式与之前的没有不同
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pvc-database
+spec:
+  containers:
+    - name: app
+      image: mysql
+      ports:
+        - name: mysql
+          containerPort: 3306
+          protocol: TCP
+      volumeMounts:
+        - name: database
+          mountPath: /usr/lib/mysql
+  volumes:
+    - name: database
+      persistentVolumeClaim:
+        claimName: database-pvc
+```
+
+使用这种间接方法从基础设施里获取存储，对于应用程序开发人员来说更简单，因为研发人员不需要关心底层实际使用的存储技术。
+
+#### 回收持久卷
+
+当我们删除一个持久卷声明并再次创建时，我们可以看到持久卷声明并没有成功而是为`Pending`状态，这是因为之前已经使用过这个持久卷（PV）了，所以它可能包含前一个PVC的数据，如果管理员还没来得及清理，那就不应该将这个卷绑定到全新的声明中。
+
+* 手动回收持久卷：我们在`persistentVolumeReclaimPolicy: Retain`声明持久卷（PV）在从声明（PVC）中释放后仍然保留它和数据内容。我们只能通过手动删除并重新创建持久卷。
+* 自动回收持久卷：我们可以配置`persistentVolumeReclaimPolicy: Delete`声明持久卷将在PVC被删除时自动删除卷的内容从而可以被再次使用。
+
+需要注意，某些持久卷可能不支持特定的一些回收策略，**在创建自己的持久卷之前，一定要检查卷中所用到的特定底层存储支持什么回收策略**
+
+
+
+### 持久卷的动态卷配置
+
