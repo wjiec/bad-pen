@@ -234,3 +234,64 @@ spec:
 
 ### 持久卷的动态卷配置
 
+使用持久卷和持久卷声明可以轻松获得持久化存储资源，但这仍需要一个集群管理来支持创建持久卷。幸运的是，Kubernetes还可以通过动态配置持久卷来自动执行这个任务（分配持久卷）。集群管理员可以创建一个持久卷配置，并定义一个或多个StorageClass对象，从而让开发人员选择他们想要的持久卷类型而不仅仅只是创建持久卷。**StorageClass资源并不属于任一命名空间**。
+
+#### 通过StorageClass资源定义可用存储类型
+
+StorageClass资源指定持久卷声明（PVC）请求此StorageClass时应该使用哪个供应程序来提供持久卷
+
+```yaml
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: localpath
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+```
+
+创建StorageClass资源后，用户可以在其持久卷声明中按名称应用存储类
+
+```yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc-sc-database
+spec:
+  resources:
+    requests:
+      storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: localpath
+```
+
+除了在PVC中指定大小和访问模式，持久卷声明还需要指明所使用的存储类。在创建该PVC后，持久卷（PV）由存储类（StorageClass）资源中指定的`provisioner`创建。
+
+**集群管理员可以创建具有不同性能或其他特性的多个存储类，然后研发人员再决定对应每一个声明最适合的存储类。StorageClass的好处在于，PVC是通过名称去引用SC的，因此只要SC的名词在集群中是相同的，那么PVC便可以跨集群移植。**
+
+#### 不指定存储类的动态配置
+
+我们可以通过`kubectl get sc`获取所有的存储类定义，其中会有一个默认的存储类，我们将这个存储类的定义导出
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  creationTimestamp: "2021-12-22T15:10:37Z"
+  name: standard
+  resourceVersion: "284"
+  uid: d0bf7f27-8f41-4392-96e7-8b9336927be5
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+```
+
+我们可以看到存储类中有一个注解`storageclass.kubernetes.io/is-default-class`，这会使其成为默认的存储类。**如果在PVC中没有明确指明使用哪个存储类，则会将默认存储类用于提供动态持久卷。**
+
+**当我们需要让PVC绑定到手动创建的PV时，我们可以配置PVC使用`storageClassName: ""`表示不使用默认的存储类动态配置选项。**
+
+* **设置为空字符串**：表示使用自定义配置的PV
+* **不设置这个字段**：表示使用默认的存储类生成动态PV
+
