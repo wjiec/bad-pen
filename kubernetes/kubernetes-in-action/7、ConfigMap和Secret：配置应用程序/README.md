@@ -159,3 +159,87 @@ spec:
         - "$(PID_FILE)"
 ```
 
+
+
+### 使用configMap卷将条目暴露为文件
+
+环境变量或者命令行参数作为配置值通常适用于变量值较短的场景，如果需要传递较大的配置文件给容器，可以使用**configMap卷**将ConfigMap中的条目映射为一个文件，运行于容器中的进程可以通过读取文件内容获得对应的配置值。
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: configmap-webserver
+spec:
+  containers:
+    - name: web-server
+      image: nginx
+      volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+  volumes:
+    - name: nginx-config
+      configMap:
+        name: webserver-config
+```
+
+我们也可以通过`pod.spec.volumes.configMap.items`创建仅包含部分条目的configMap卷。
+
+```yaml
+volumes:
+  - name: nginx-config
+    configMap:
+      name: webserver-config
+	  items:
+		- key: gzip.conf
+		  path: use-gzip.conf
+```
+
+**注意：指定单个条目时需同时设置条目的键名称以及对应的文件名。**
+
+#### 挂载卷中的部分文件或者文件夹
+
+当我们将卷挂载到某个文件夹时，原镜像中对应文件夹里**原本存在的文件将会被隐藏**（Linux挂载文件系统同样如此），使用configMap卷时也会导致这个问题。
+
+我们可以使用`volumeMounts`中提供的`subPath`字段挂载**卷中的部分文件或者文件夹**。使用这种方式可以挂载文件的同时又不影响原有的文件，但是**会带来文件更新的问题**。
+
+```yaml
+spec:
+  containers:
+    - name: web-server
+      image: nginx:alpine
+      volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/999-gzip.conf
+          subPath: gzip.conf # 这是卷中的文件名
+  volumes:
+    - name: nginx-config
+      configMap:
+        name: webserver-config
+        defaultMode: 0600
+```
+
+**注意：挂载任意一种卷时均可以使用`subPath`属性，通过这个属性可以选择挂载部分卷而不是挂载完整的卷**
+
+#### 为configMap卷中的文件设置权限
+
+configMap卷中所有文件的权限默认为`644(-rw-r--r--)`，我们可以在`pod.spec.volumes.defaultMode`中进行修改
+
+```yaml
+volumes:
+  - name: nginx-config
+    configMap:
+      name: webserver-config
+	  items:
+		- key: gzip.conf
+		  path: use-gzip.conf
+	defaultMode: 0600
+```
+
+#### 更新应用配置且不重启应用程序
+
+使用环境变量或者命令行参数作为配置源的弊端在于无法在进程运行时更新配置。将ConfigMap暴露为卷可以达到配置热更新的效果（不重新创建Pod情况下更新配置，但是需要应用程序支持）。
+
+当ConfigMap被更新之后，卷中引用它的所有文件也会被更新（所有的文件会被一次性的更新，这是Kubernetes通过符号连接实现的【将整个目录直接链接到新配置上】）。**如果挂载的是单个文件而不是完整的卷，ConfigMap被更新之后对应的文件不会被更新。**
+
+***注意：由于ConfigMap卷中文件的更新对于所有运行的实例不是同步的，所以不同的Pod中的文件可能会在短时间内出现行为不一致的情况。***
