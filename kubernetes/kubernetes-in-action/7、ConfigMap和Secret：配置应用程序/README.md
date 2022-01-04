@@ -243,3 +243,106 @@ volumes:
 当ConfigMap被更新之后，卷中引用它的所有文件也会被更新（所有的文件会被一次性的更新，这是Kubernetes通过符号连接实现的【将整个目录直接链接到新配置上】）。**如果挂载的是单个文件而不是完整的卷，ConfigMap被更新之后对应的文件不会被更新。**
 
 ***注意：由于ConfigMap卷中文件的更新对于所有运行的实例不是同步的，所以不同的Pod中的文件可能会在短时间内出现行为不一致的情况。***
+
+
+
+### 使用Secret给容器传递敏感数据
+
+配置通常会包含一些敏感数据（比如证书和私钥），为了存储与分发此类信息，Kubernetes提供了一种称为Secret的资源对象。Secret结构与ConfigMap类似，都是键值对的映射，使用方式上也与ConfigMap相似：
+
+* 将Secret条目作为环境变量传递给容器
+* 将Secret条目暴露为卷中的文件
+
+Kubernetes只将Secret分发到需要访问的Pod所在节点上以保障其安全性，而且Secret只会存储在节点的内存中，永远不会写入物理存储。我们可以同样可以通过命令行`kubectl create secret`来创建或者通过yaml的形式来创建。
+
+```bash
+kubectl create secret generic web-https --from-file=server.key --from-file=server.crt --from-literal=domain=hello.example.com
+```
+
+对比Secret和ConfigMap，Secret中的内容会以Base64格式编码，而ConfigMap是以纯文本显示，这就让我们需要在处理yaml或json文件时对内容进行编解码操作。**Secret采用Base64编码的原因是它可以涵盖最大不超过1M的二进制数据。**
+
+#### 在Pod中使用Secret
+
+在Pod中使用Secret的方式与ConfigMap类似
+
+```yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: secret-server-config
+stringData:
+  token: hello-world
+  server.key: server-key...
+  server.crt: server-pem...
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: secret-server
+spec:
+  containers:
+    - name: web-server
+      image: nginx:alpine
+      volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+        - name: certs
+          mountPath: /etc/nginx/certs
+          readOnly: true
+    - name: generator
+      image: laboys/fortune
+      env:
+        - name: REQUEST_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: secret-server-config
+              key: token
+      volumeMounts:
+        - name: html
+          mountPath: /var/www
+      args:
+        - --token
+        - "$(REQUEST_TOKEN)"
+  volumes:
+    - name: html
+      emptyDir: {}
+    - name: certs
+      secret:
+        secretName: secret-server-config
+        items:
+          - key: server.crt
+            path: server.crt
+          - key: server.key
+            path: server.key
+```
+
+可以看到使用Secret的方式基本上与使用ConfigMap相同，Secret的独立条目也可以作为环境变量暴露（使用`secretKeyRef`字段）。
+
+#### 镜像拉取Secret
+
+Kubernetes自身在某些时候希望我们能够传递证书给它（比如从某个私有仓库拉取镜像）。我们可以在`pod.spec.containers.imagePullSecrets`字段中引用这个Secret资源。我们可以通过命令行的方式创建一个拉取秘钥
+
+```bash
+k create secret docker-registry example-pulls \
+	--docker-server harbor.example.com \
+	--docker-username admin \
+	--docker-password hello-world \
+	--docker-email admin@example.com
+```
+
+通过`kubectl create secret docker-registry`来创建一个`docker-registry`类型的秘钥，然后我们就可以让Kubernetes从这个私有仓库中拉取镜像
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pull-private-image
+spec:
+  imagePullSecrets:
+    - name: example-pulls
+  containers:
+    - name: app
+      image: harbor.example.com/project/app-service
+```
+
+**我们可以通过添加Secret到ServiceAccount中来让所有的Pod都能自动添加上拉取秘钥。**
