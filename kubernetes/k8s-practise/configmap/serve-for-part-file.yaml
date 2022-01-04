@@ -1,0 +1,30 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: webserver-config
+data:
+  gzip.conf: |
+    server {
+      gzip on;
+      gzip_types text/plain text/html;
+    }
+  index.html: |
+    hello from web-server
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: configmap-partfile-webserver
+spec:
+  containers:
+    - name: web-server
+      image: nginx:alpine
+      volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/999-gzip.conf
+          subPath: gzip.conf
+  volumes:
+    - name: nginx-config
+      configMap:
+        name: webserver-config
+        defaultMode: 0600

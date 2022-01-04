@@ -1,0 +1,12 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: mysql-use-configmap
+spec:
+  containers:
+    - name: database
+      image: mysql
+      envFrom:
+        - prefix: CONFIG_
+          configMapRef:
+            name: http-config

@@ -1,0 +1,17 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: database-mysql
+spec:
+  containers:
+    - name: database
+      image: mysql
+      env:
+        - name: PID_FILE
+          valueFrom:
+            configMapKeyRef:
+              name: database-config
+              key: mysql-pid-file
+      args:
+        - --pid
+        - "$(PID_FILE)"
