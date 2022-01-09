@@ -193,3 +193,56 @@ kubernetes.io/config.seen="2022-01-08T14:12:32.146637591Z"
 
 ### 与Kubernetes API服务器交互
 
+DownwardAPI仅仅可以暴露一个Pod自身的元数据，而且只可以暴露部分元数据。但我们需要其他Pod的信息，甚至是集群中其他资源的信息时，我们就需要直接与API服务器进行交互了。
+
+#### 在外部访问Kubernetes访问REST API
+
+我们可以在集群内部（Pod之外）通过`kubectl cluster-info`来获取集群的API服务器地址，并通过curl与之进行通信
+
+```bash
+$ kubectl cluster-info
+$ curl -k https://127.0.0.1:xxxx
+{
+  "kind": "Status",
+  "apiVersion": "v1",
+  "metadata": {
+    
+  },
+  "status": "Failure",
+  "message": "forbidden: User \"system:anonymous\" cannot get path \"/\"",
+  "reason": "Forbidden",
+  "details": {
+    
+  },
+  "code": 403
+}
+```
+
+因为我们没传入访问Token，所以会直接得到403错误，但是我们可以使用`kubectl proxy`命令创建一个代理与服务器进行交互，这个代理将会替我们处理所有的鉴权问题。
+
+```bash
+$ kubectl proxy
+Starting to serve on 127.0.0.1:8001
+
+$ curl localhost:8001
+{
+  "paths": [
+    "/.well-known/openid-configuration",
+    "/api",
+    "/api/v1",
+    "/apis",
+    "/apis/",
+	"..."
+  ]
+}
+```
+
+当我们直接访问这个API时。API服务器会返回一组路径，这些路径对应了我们创建Pod、Service等资源时对应的API组（**没有被列入API组的资源类型并不属于任何组，原因是Kubernetes初期并没有API组这个概念，现在一般被认为是核心API组**）和版本信息。
+
+我们可以按照路径列表进行拼接路径来访问特定的资源
+
+```bash
+curl localhost:8001/api/v1/pods # 查看所有的Pod
+curl localhost:8001/apis/batch/v1/namespace/default/jobs/my-job # 访问指定的单个资源
+```
+
