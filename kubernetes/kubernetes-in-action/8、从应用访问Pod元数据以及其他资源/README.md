@@ -246,3 +246,54 @@ curl localhost:8001/api/v1/pods # 查看所有的Pod
 curl localhost:8001/apis/batch/v1/namespace/default/jobs/my-job # 访问指定的单个资源
 ```
 
+#### 从Pod内部与API服务器进行交互
+
+从一个Pod内部与API服务器进行交互需要关注以下三件事情：
+
+* 确定API服务器的位置（通过`kubernetes.default`服务或者通过环境变量`KUBERNETES_SERVICE_HOST`）
+* 确保是与API服务器进行交互，而不是一个假冒的（默认secret卷中的`ca.crt`文件）
+* 通过服务器的认证，否则将不能查看或进行任何操作（默认secret卷中的`token`文件）
+
+我们可以在一个带有`curl`的容器中执行以下命令来向API服务器发起请求
+
+```bash
+# 指定curl的默认使用的证书文件
+export CURL_CA_BUNDLE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+# 指定访问API服务器所需要的认证秘钥
+export API_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+
+curl -H "Authorization: Bearer ${API_TOKEN}" https://kubernetes.default
+```
+
+如果一切正常，就可以看到curl返回了一串与在外部通过`kubectl proxy`相似的内容。如果出现`403 Forbidden`错误，那可能是因为我们在集群中开启了RBAC权限控制。我们可以使用如下命令将集群管理员权限直接授予所有的服务账户（**千万不能在生产环境中使用**）
+
+```bash
+kubectl create clusterrolebinding permissive-binding --clusterrole cluster-admin --group system:serviceaccounts
+```
+
+同时需要注意在默认的Secret卷中还有一个namespace文件表示当前Pod所在的命名空间。我们可以读取这个文件来获取命名空间信息。
+
+#### 通过ambassador容器简化访问
+
+我们可以在需要访问API服务器的Pod上额外运行一个ambassador容器（边车模式）在其中执行`kubectl-proxy`来代理API服务器以简化其他容器的访问。
+
+```yaml
+spec:
+  containers:
+  - name: app
+    image: ...
+  - name: ambassador
+    image: xxx/kubectl-proxy
+```
+
+当需要访问API服务器时，我们向ambassador容器发送HTTP请求，然后代理通过secret中的ca.crt和token向API服务器发起请求，最后将结果返回给客户端。
+
+#### 使用客户端库与API服务器进行交互
+
+我们也可以直接在应用中通过官方或社区SDK将访问API服务器的功能集成在应用程序中。
+
+
+
+### 通过SwaggerUI研究API
+
+Kubernetes中不仅暴露了SwaggerAPI同时也集成了一个SwaggerUI。不过默认情况下SwaggerUI没有激活，我们可以在启动API服务器时通过增加`--enable-swagger-ui=true`来启用支持。然后我们就可以通过`https://api-server/swagger-ui`来访问。

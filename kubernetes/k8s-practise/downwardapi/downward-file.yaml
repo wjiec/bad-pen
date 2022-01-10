@@ -1,0 +1,52 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: downward-file
+spec:
+  containers:
+    - name: printer
+      image: alpine
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+      resources:
+        requests:
+          cpu: 16m
+          memory: 16Mi
+        limits:
+          cpu: 64m
+          memory: 64Mi
+      volumeMounts:
+        - name: downward
+          mountPath: /var/downward
+  volumes:
+    - name: downward
+      downwardAPI:
+        items:
+          - path: pod/name
+            fieldRef:
+              fieldPath: metadata.name
+          - path: pod/namespace
+            fieldRef:
+              fieldPath: metadata.namespace
+          - path: requests/cpu
+            resourceFieldRef:
+              containerName: printer
+              resource: requests.cpu
+          - path: requests/memory
+            resourceFieldRef:
+              containerName: printer
+              resource: requests.memory
+          - path: limits/cpu
+            resourceFieldRef:
+              containerName: printer
+              resource: limits.cpu
+          - path: limits/memory
+            resourceFieldRef:
+              containerName: printer
+              resource: limits.memory
+          - path: pod/labels
+            fieldRef:
+              fieldPath: metadata.labels
+          - path: pod/annotations
+            fieldRef:
+              fieldPath: metadata.annotations
+  restartPolicy: Never
