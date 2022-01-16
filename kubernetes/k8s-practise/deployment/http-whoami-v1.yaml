@@ -1,0 +1,18 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: http-whoami
+spec:
+  selector:
+    matchLabels:
+      app: http-whoami
+  template:
+    metadata:
+      labels:
+        app: http-whoami
+    spec:
+      containers:
+        - name: app
+          image: laboys/http-whoami
+  strategy:
+    type: RollingUpdate
