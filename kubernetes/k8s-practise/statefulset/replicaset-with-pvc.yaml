@@ -1,0 +1,35 @@
+kind: ReplicaSet
+apiVersion: apps/v1
+metadata:
+  name: http-whoami
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: http-whoami
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: http-whoami
+    spec:
+      containers:
+        - name: app
+          image: laboys/http-whoami
+          volumeMounts:
+            - name: html
+              mountPath: /var/www
+      volumes:
+        - name: html
+          persistentVolumeClaim:
+            claimName: whoami-html
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: whoami-html
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 128Mi

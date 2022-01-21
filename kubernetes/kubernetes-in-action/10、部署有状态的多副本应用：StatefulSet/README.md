@@ -60,3 +60,141 @@ StatefulSet不仅拥有稳定的标识和独立的存储，它的Pod还有其他
 
 ### 使用StatefulSet
 
+为了部署一个StatefulSet应用程序，我们需要创建多个不同类型的对象
+
+* 存储数据的持久卷（PV，当集群不存在StrageClass时才需要创建）
+* 一个必须的Headless Service
+* StatefulSet本身
+
+我们可以使用以下方式进行创建
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: ss-http-whoami
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: http-whoami
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: http-whoami
+spec:
+  replicas: 3
+  serviceName: ss-http-whoami
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: http-whoami
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: http-whoami
+    spec:
+      containers:
+        - name: app
+          image: laboys/http-whoami
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        resources:
+          requests:
+            storage: 1Mi
+        accessModes:
+          - ReadWriteOnce
+```
+
+值的注意的是，我们在StatefulSet的`spec.template`模板中并没有指定具体的`volumes`声明需要挂载的卷。而这里将会由StatefulSet创建指定Pod时自动将`persistentVolumeClaim`卷添加到Pod中。
+
+StatefulSet会在第一个Pod就绪之后才会开始创建第二个Pod，这是因为状态明确的分布式应用对同时有多个实例启动发生竞争的情况非常敏感，所以依次启动每个实例是比较安全可靠的。
+
+#### 使用API服务器提供的代理功能进行测试
+
+当我们需要检查应用程序时，我们可以在不启动额外Pod的情况下通过API服务器提供的代理功能来实现
+
+```plain
+<apiServer>:<port>/api/v1/namespaces/<namespace>/pods/<pod>/proxy/<path>
+```
+
+因为API服务器的每次请求都需要添加访问令牌，但是我们还有`kubectl proxy`可以给我们提供免授权的访问
+
+```bash
+kubectl proxy
+curl -vvv http://localhost:8001/api/v1/namespaces/default/pods/http-whoami-0/proxy/
+```
+
+当我们使用`kubectl delete pod http-whoami-1`删除一个Pod时，StatefulSet会使用完全一致的Pod来替换被删除的Pod。扩容和缩容的行为与删除Pod再重建没什么区别。**唯一需要注意的是，StatefulSet的缩容只会删除对应的Pod对象（不会删除PVC和PV对象），且是从序号最大的Pod开始删除**。
+
+我们也可以为这些Pod创建一个普通版本的服务来让外部或者集群内部可以访问
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: pub-http-whoami
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: http-whoami
+```
+
+然后我们也可以通过API服务器提供的代理接口来进行访问
+
+```bash
+<apiServer>:<port>/api/v1/namespaces/<namespace>/services/<service>/proxy/<path>
+curl -vvv http://localhost:8001/api/v1/namespaces/default/services/pub-http-whoami/proxy/
+```
+
+#### 更新StatefulSet
+
+当我们使用例如`kubectl set image`或者`kubectl patch`或者`kubectl edit`来更新StatefulSet中模板的镜像时，StatefulSet会自动进行滚动升级（1.7版本之前StatefulSet的表现更类似于ReplicaSet，只有新Pod创建时用的才是新镜像）。
+
+
+
+### 在StatefulSet中发现伙伴节点
+
+分布式应用中很重要的一个需求是应用程序实例能够发现彼此，这样才能找到集群中的其他成员。
+
+#### SRV记录
+
+DNS中的SRV记录用来指向某一个服务的主机名和端口号，Kubernetes通过一个Headless Service创建SRV记录来指向Pod的主机名。我们可以通过`dig`命令进行查询
+
+```bash
+$ dig SRV ss-http-whoami.default.svc.cluster.local
+
+```
+
+当一个Pod需要获取在StatefulSet中其他的Pod时，需要做的只是进行一次简单的DNS SRV查询即可。
+
+
+
+### StatefulSet如何处理失效节点
+
+StatefulSet要保证不会有两个拥有相同标记和存储的Pod同时运行，当一个节点失效时，StatefulsSet在明确知道一个Pod不再运行之前它不会且不应该创建一个替代的Pod。
+
+当节点上的kubelet无法与Kubernetes API服务器通信（无法汇报本节点和上面的Pod都在正常运行），过一段时间后控制台就会标记该节点为`NotReady`状态，且该节点上的所有Pod状态变为`Unknown`状态。
+
+当一个Pod变成`Unknown`状态后
+
+* 如果在一段时间后节点能正常联通且正常汇报Pod的状态，那这个Pod会重新标记为`Running`状态
+* 如果持续几分钟都无法访问，那这个Pod就会自动从节点上被驱逐（主节点控制），驱逐是通过删除Pod资源来实现的
+  * **删除Pod时由于无法与节点进行通信，所以Pod会一直卡在`Terminating`状态，实际上并不会被真正删除**
+
+如果我们确定节点以及彻底失效且不会再次访问时，我们可以使用如下命令强制删除Pod
+
+```bash
+kubectl delete pod http-whoami-0 --force --grace-period 0
+```
+
+执行这个操作之后StatefulSet将在一个新节点上重新创建新的Pod
