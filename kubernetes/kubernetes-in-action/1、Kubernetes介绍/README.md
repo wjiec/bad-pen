@@ -167,6 +167,13 @@ Kubernetes将你的容器化应用运行在集群的某个地方，并能在任�
 * **kubelet**：与ApiServer进行通信，并管理所在节点的容器
 * **kube-proxy**：负责处理组件之间的网络流量，提供负载均衡等
 
+##### 附加组件
+
+* kubedns：用于在集群内提供基于服务名字的解析服务
+* ingress-controller：用于提供基于http(s)的主机/路由映射支持
+* 容器网络接口插件（CNI）：用于建立集群内部的扁平网络
+* Dashboard：用于监控和可视化操作Kubernetes
+
 #### 在Kubernetes中运行应用
 
 为了在Kubernetes中运行应用，首先需要**将应用打包进一个或多个容器镜像**，再将这些容器镜像**推送到容器仓库中**，最后**将应用程序的Spec发布**到Kubernetes ApiServer中。
