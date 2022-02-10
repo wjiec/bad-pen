@@ -57,7 +57,7 @@ Kubernetes的ApiServer作为中心组件，其他组件或者客户端（如`kub
 
 除此之外，ApiServer不会做其他额外的操作。
 
-#### ApiServer如何融资客户端资源变更
+#### ApiServer如何通知客户端资源变更
 
 创建Pod，管理服务（Service）的端点（Endpoint）这是控制器管理器的工作。而这些操作是控制平面组件通过向ApiServer订阅资源的变更（创建、修改、删除）通知来实现的。
 
@@ -99,4 +99,44 @@ Kubernetes的ApiServer作为中心组件，其他组件或者客户端（如`kub
 * PersistentVolume控制器：为持久卷声明（PVC）找到最合适的持久卷并将其绑定。
 
 #### kubelet做了什么
+
+kubelet是负责管理所有运行在工作节点上的内容组件。他一般都按照顺序会有以下几个任务
+
+* 启动时在ApiServer中通过创建一个Node资源来注册该节点
+* 持续监控ApiServer是否有将Pod分配这个节点，并运行容器
+* 随后持续监控运行的容器并向ApiServer报告它们的状态、事件和资源消耗
+* 同时也是运行容器存活、就绪探针，当探针发生失败时重启容器
+* 当Pod从ApiServer删除时，kubelet终止容器并通知ApiServer
+
+kubelet一般会通过ApiServer来获取Pod列表，它也可以基于本地指定目录下的Pod清单来运行Pod。
+
+#### kube-proxy的作用
+
+kube-proxy用于确保客户端可以通过Kubernetes API连接到你定义的服务，同时确保对服务IP和端口的连接最终能达到某个Pod上，如果有多个Pod支持一个服务，那么代理会起到负载均衡的作用。
+
+kube-proxy有几种代理模式：
+
+* userspace模式：kube-proxy的最初实现方式，通过配置iptables将流量转发给kube-proxy服务，然后kube-proxy再将流量转发某个具体的Pod（轮询）。
+* iptables模式：通过配置iptables规则让内核将流量转发给随机的一个Pod
+* ipvs模式：通过配置ipvs虚拟IP的方式来将流量随机转发到某个Pod
+
+#### Kubernetes插件
+
+通过将YAML文件提交给ApiServer，这些组件会作为Pod部署在集群中并以插件的形式进行工作。这些组件是通过Deployment资源或者ReplicationController资源或者也可以是DaemonSet资源来部署在集群中的。
+
+#### DNS服务器如何工作
+
+集群中所有Pod默认都会使用哈集群内部的DNS服务，这使得Pod能够轻松地通过名称查询到服务，甚至是屋头服务的Pod地址。DNS服务通过在每个Pod中的`/etc/resolve.conf`中的`nameserver`来定义。
+
+DNS服务利用ApiServer的监听机制来订阅Service和Endpoint的变动使得客户端总是能获取到最新的DNS信息。
+
+#### Ingress控制器如何工作
+
+Ingress控制器运行一个反向代理服务器，并根据集群中定义的Ingress、Service以及Endpint资源来配置其中的反向代理程序。
+
+需要注意的是虽然Ingress资源定义指向一个Service，但是Ingress控制器会直接将流量转发给对应的Pod而不经过服务（通过查询Endpoint实现）
+
+
+
+### 控制器如何协作
 
