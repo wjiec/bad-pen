@@ -140,3 +140,92 @@ Ingress控制器运行一个反向代理服务器，并根据集群中定义的I
 
 ### 控制器如何协作
 
+当我们启动应用程序之前，控制器、调度器、kubelet就已经通过ApiServer监听它们各自感兴趣的资源了。当我们创建一个Deployment资源时，按照时间顺序发生了一下事件：
+
+* kubectl通过REST API将YAML文件提交给ApiServer，ApiServer经过鉴权并检查Deployment资源没问题后将其保存到etcd中，并返回响应给kubectl
+* Deployment控制器检查到一个新的Deployment资源被创建时就会通过Kubernetes API创建一个ReplicaSet资源
+* 新创建的ReplicaSet资源会被ReplicaSet控制器检测到，此时该控制器根据Pod模板（Deployment创建ReplicaSet时提供）创建Pod资源
+* 新创建的Pod也保存于etcd中，当调度器发现Pod缺少一项非常重要的属性（`nodeName`）时，就会为这个Pod选择一个最佳的节点并保存到Pod属性中
+* 最后节点上的kubelet发现有一个新Pod被分配到当前节点，然后就会根据Pod定义调用容器运行时启动Pod容器并根据需要持续监控容器状态并向ApiServer报告
+
+
+
+### 了解运行中的Pod是什么
+
+当Pod运行时，运行的Pod在工作节点上表现为N个应用容器和1个``pause`附加容器。该附加容器是一个基础容器（全称`infrastucture container`），它的唯一目的就是保存所有的命名空间（Linux命名空间）。
+
+其他的应用容器共享`pause`容器的网络栈和Volume挂载卷，其主要为应用容器提供以下命名空间：
+
+* PID命名空间：可以看到不同应用容器中的进程ID
+* 网络命名空间：能够访问同一个网络地址和端口
+* IPC命名空间：能够在不同应用容器中使用SystemV IPC或POSIX消息队列进行通信
+* UTS命名空间：共享同一个主机名
+* Volumes（共享存储卷）：不同应用容器可以共享目录
+
+如果是Docker环境，我们可以通过执行以下命令进行手动共享命名空间
+
+```bash
+docker run -d --name manual_pause k8s.gcr.io/pause:3.5
+
+docker run -d --name web --net=container:manual_pause --ipc=container:manual_pause --pid=container:manual_pause nginx
+docker run -d --name app --net=container:manual_pause --ipc=container:manual_pause --pid=container:manual_pause http-whoami
+```
+
+
+
+### 跨Pod网络
+
+通过一个扁平的、非NAT网络和Pod通信是由系统管理员或者CNI（`Container Network Interface`）插件建立的，而非Kubernetes本身。`pause`基础容器会保存Pod的IP地址以及网络命名空间等信息。
+
+在基础容器启动之前，容器运行时会为容器创建一个虚拟的`Ethernet`接口对（`veth pair`，可以类比成一个管道或者直接理解为一根网线的两个以太网端口），其中**一端在容器的网络命名空间中**，并被重命名为`eth0`，**另一端则保留在主机的命名空间中**（在`ip a`中展示为一个`veth-xxx`项目）并被绑定到同一个网桥上（`bridge`）同时从网桥的IP地址段获取一个IP赋值到容器中的eth0接口。
+
+#### 同节点的Pod通信
+
+当应用程序发起请求或数据时，报文都会经过容器内的`eth0`端口到达主机容器的网桥中，然后网桥发现目的地址如果是同网段的则直接将该报文转发给目的地址的`veth`接口对，最后到达目的容器内的`eth0`接口。
+
+#### 不同节点的Pod通信
+
+与同节点通信一样，报文通过容器内的`eth0`接口到达网桥，此时网桥发现目的地址与当前网段不符，则会将数据转发给主机上的`eth0`端口并通过网线或者光纤到达另一个节点的`eth0`接口上并给转发给容器网桥，最后网桥将报文通过`veth`接口对转发到目的容器内的`eth0`端口上。
+
+#### 引入容器网络接口（CNI）
+
+跨节点的Pod通信时节点的路由表配置比较复杂，为了让连接容器到网络更加方便我们可以使用CNI网络插件让及节点忽略底层网络拓扑。常用的CNI插件有：
+
+* `Calico`
+* `Flannel`
+* `Romana`
+* `Weave Net`
+
+**注意：kubelet需要使用`--network-plugin=cni`命令启用才能使用CNI**
+
+
+
+### 服务是如何实现的
+
+和Service相关的任何事情都是由每个节点上运行的kube-proxy进程处理。每个Service都有自己问的的IP地址和端口，由于IP地址是虚拟的，所以服务IP并没有分配一个网络接口，所以它不会响应ping数据包。
+
+当在ApiServer中创建一个服务时，一个虚拟IP会立即分配到这个服务，并通知所有工作节点上的kube-proxy有一个新服务已经被创建了。然后每个kube-proxy都会让这个服务的地址在当前工作节点上可寻址。
+
+**具体的做法是建立一些iptables规则，确保当有数据需要被发送到服务地址上时会被内核修改为正确的目的IP和端口。**
+
+**需要注意的时kube-proxy同时也会监控Endpoint对象的修改，这是因为当有多个Pod提供服务时需要实时更新iptables中的转发地址。**
+
+
+
+### 运行高可用集群
+
+在Kubernetes上运行应用的一个理由就是：保证运行不被中断，或者说尽量少地人工介入基础设施。为了达到这个目的，不仅应用需要高可用持续运行，Kubernetes控制平面的组件也需要高可用地不间断运行。
+
+#### 让应用程序变得高可用
+
+为了保证应用程序的高可用性，我们只需要创建Deployment资源来运行应用，并配置合适数量的复制集，其他都可以交给Kubernetes处理。
+
+#### 让Kubernetes控制平面变得高可用
+
+为了让Kubernetes实现高可用，我们需要运行多个主节点并运行多个核心组件实例：
+
+* etcd分布式数据存储：etcd本身就被设计为一个分布式系统，其核心特性之一就是可以运行多个实例来做到高可用
+* API Server：ApiServer本身（基本上）就是无状态的服务，我们可以运行任意个实例，它们都不需要感知对方的存在
+  * 但是ApiServer需要一个负载均衡器，这样客户端总能连接到健康的ApiServer实例
+* 控制器管理器：该组件同时间内只有一个实例有效，其他实例将作为备用实例，当领导者宕机时所有备用实例将会选举新的领导者
+* 调度器：与控制器管理器类似，同时将只能有一个实例处于运行状态，其他实例处于待命状态
