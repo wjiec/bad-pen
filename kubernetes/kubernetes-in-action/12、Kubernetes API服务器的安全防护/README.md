@@ -80,3 +80,81 @@ RBAC授权规则通过Kubernetes中的4中资源来进行配置：
 * `RoleBinding（角色绑定），ClusterRoleBinding（集群角色绑定）`：指定某个用户、组或ServiceAccount被绑定到某个角色
 
 **需要注意的是：`Role`和`RoleBinding`是在某个命名空间下的资源（但是可以引用集群角色，只不过`RoleBinging`隶属于某个命名空间），而`ClusterRole`和`ClusterRoleBinding`是集群级别的资源。**
+
+#### 使用Role和RoleBinding
+
+Role资源定义了可以在哪些资源上执行哪些操作，我们可以使用以下YAML来创建一个Role资源
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pod-reader
+  namespace: foo # 该角色创建在 foo 命名空间
+rules:
+  - verbs: # 动作
+      - list
+      - get
+    resources:
+      - pods # 定义资源必须使用复数形式
+    apiGroups:
+      - "" # 所属的API组
+```
+
+在角色定义中的每个规则都需要为涉及的资源指定`apiGroup`，我们这边直接通过`resources`定义了可以访问所有的Pod资源，但是我们也可以通过`resourceNames`指定只允许访问某些某些特殊的资源。
+
+我们也可以使用如下命令实现与以上YAML文件一样的效果（命令行会自动匹配相对应的`apiGroup`）
+
+```bash
+# kubectl create role <role-name> --verb <verb1> --verb <verb2> --resource <resource-name> --namespace <namespace>
+kubectl create role pod-reader-cmd --verb list --verb get --resource pods --namespace foo
+```
+
+创建好Role之后，我们就可以将角色绑定到ServiceAccount上了，我们可以使用如下命令来实现绑定
+
+```bash
+# kubectl create rolebinding <rolebinding-name> --role <role-name> --serviceaccount <namespace:serviceaccount-name>
+kubectl create rolebinding foo-read-pod --role pod-reader --serviceaccount foo:default
+```
+
+当然也可以使用以下YAML文件来定义RoleBinding
+
+```yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: foo-read-pod
+  namespace: foo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-reader
+subjects:
+  - kind: ServiceAccount
+    namespace: foo
+    name: default
+  - kind: ServiceAccount
+    namespace: bar
+    name: default
+```
+
+**RoleBinding始终引用单个角色，但是可以将角色绑定到多个主体上（`subjects`），同时可以注意到RoleBinding可以绑定到非本命名空间中的ServiceAccount上（表示这个bar命名空间的Pod可以列出或查看foo命名空间的Pods资源）**
+
+#### 使用ClusterRole和ClusterRoleBinding
+
+Role和RoleBinding都是命名空间的资源，这意味着他们属于某一个命名空间，但是当我们需要允许跨不同命名空间访问资源，或者访问一些不在命名空间中的特定资源（比如`Node, PersistentVolume, Namespace`等），甚至访问一些不表示资源的URL路径（比如`/api/healthz`），常规的Role不能对这些资源进行授权，但是ClusterRole可以。
+
+ClusterRole是一种集群级别的资源，它允许访问没有命名空间的资源或者非资源类型的资源，也可以作为单个命名空间内部绑定的公共角色从而避免在每个命名空间中都需要重新定义相同的角色。我们可以通过命令或者YAML来创建一个ClusterRole资源
+
+```bash
+kubectl create clutserrole pv-reader --verb list,get --resource persistentvolumes
+kubectl create clutserrole node-reader --verb list,get --resource nodes
+```
+
+接着我们就可以创建一个ClusterRoleBinding资源来将角色绑定到主体上（**注意：ClusterRole只能使用ClusterRoleBinding来绑定，不能使用RoleBinding来引用ClusterRole资源**）
+
+```bash
+kubectl create clusterrolebinding foo-read-pv --clusterrole pv-reader --serviceaccount foo:default
+kubectl create clusterrolebinding foo-read-node --clusterrole node-reader --serviceaccount foo:default
+```
+
