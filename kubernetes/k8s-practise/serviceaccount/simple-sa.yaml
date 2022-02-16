@@ -1,0 +1,8 @@
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: simple-sa
+imagePullSecrets:
+  - name: example-harbor-com
+secrets:
+  - name: simple-sa-token

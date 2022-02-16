@@ -70,7 +70,7 @@ RBAC（Role-Based Acess Control）即基于角色的权限控制。RBAC将用户
 
 #### RBAC授权插件
 
-Kubernetes API服务器可以配置使用一个授权插件来检查是否允许用户请求执行某个动作（查看、更新、删除等），RBAC这样的授权插件运行在API服务器中，它会**决定一个客户端是否允许在请求的资源上执行某个动作**。RBAC除了可以对**资源类型**应用安全权限之外，还可以应用于**特定的资源实例**（例如一个名为xxx的服务），甚至还可以应用于**非资源URL**，因为并不是所有的路径都映射到一个资源（例如`/api/healthz`）。
+Kubernetes API服务器可以配置使用一个授权插件来检查是否允许用户请求执行某个动作（查看、更新、删除等），RBAC这样的授权插件运行在API服务器中，它会**决定一个客户端是否允许在请求的资源上执行某个动作**。RBAC除了可以对**资源类型**应用安全权限之外，还可以应用于**特定的资源实例**（例如一个名为xxx的服务），甚至还可以应用于**非资源URL**，因为并不是所有的路径都映射到一个资源（例如`/healthz`）。
 
 #### RBAC资源
 
@@ -151,10 +151,76 @@ kubectl create clutserrole pv-reader --verb list,get --resource persistentvolume
 kubectl create clutserrole node-reader --verb list,get --resource nodes
 ```
 
-接着我们就可以创建一个ClusterRoleBinding资源来将角色绑定到主体上（**注意：ClusterRole只能使用ClusterRoleBinding来绑定，不能使用RoleBinding来引用ClusterRole资源**）
+接着我们就可以创建一个ClusterRoleBinding资源来将角色绑定到主体上（**注意：非资源类型的ClusterRole只能使用ClusterRoleBinding来绑定，不能使用RoleBinding来引用非资源类型的ClusterRole**）
 
 ```bash
 kubectl create clusterrolebinding foo-read-pv --clusterrole pv-reader --serviceaccount foo:default
 kubectl create clusterrolebinding foo-read-node --clusterrole node-reader --serviceaccount foo:default
 ```
 
+#### 允许访问非资源类型的URL
+
+API服务器也会对外暴露非资源类型的URL，访问这些URL也必须要显式地授予权限。通常我们会通过`system:discovery`这个`ClusterRole`和同名的`ClusterRoleBinding`来完成对已授权用户的许可（如下输出所示）。
+
+```bash
+$ kubectl describe clusterrole system:discovery
+Name:         system:discovery
+Labels:       kubernetes.io/bootstrapping=rbac-defaults
+Annotations:  rbac.authorization.kubernetes.io/autoupdate: true
+PolicyRule:
+  Resources  Non-Resource URLs  Resource Names  Verbs
+  ---------  -----------------  --------------  -----
+             [/api/*]           []              [get]
+             [/api]             []              [get]
+             [/apis/*]          []              [get]
+             [/apis]            []              [get]
+             [/healthz]         []              [get]
+             [/livez]           []              [get]
+             [/openapi/*]       []              [get]
+             [/openapi]         []              [get]
+             [/readyz]          []              [get]
+             [/version/]        []              [get]
+             [/version]         []              [get]
+
+$ kubectl describe clusterrolebinding system:discovery
+Name:         system:discovery
+Labels:       kubernetes.io/bootstrapping=rbac-defaults
+Annotations:  rbac.authorization.kubernetes.io/autoupdate: true
+Role:
+  Kind:  ClusterRole
+  Name:  system:discovery
+Subjects:
+  Kind   Name                  Namespace
+  ----   ----                  ---------
+  Group  system:authenticated
+```
+
+**注意：如上ClusterRole引用的是URL路径而不是某一种资源，同时verbs字段也只允许设置为在这些URL上的HTTP方法。**
+
+#### 使用ClusterRole来授权访问指定命名空间的资源
+
+`ClusterRole`可以和`RoleBinding`一起来授权访问`RoleBinding`中的资源。
+
+当我们将一个`ClusterRole`与一个`ClusterRoleBinding`绑定授予一个主体`<namespace>:<sa-name>`时，表示允许这个`sa`访问**所有命名空间**下`ClusterRole`中定义的资源。
+
+当我们将一个`ClusterRole`与一个`RoleBinding`绑定授予一个主体`<namespace>:<sa-name>`时，表示允许这个`sa`访问`RoleBinding`**所在命名空间**下`ClusterRole`中定义的资源。
+
+#### Role、RoleBinding、ClusterRole、ClusterRoleBinding组合的总结
+
+* `ClusterRole, ClusterRoleBinding`：**访问集群级别的资源、非资源类型URL、所有命名空间中的资源**
+* `ClusterRole, RoleBinding`：**`RoleBinding`所在命名空间中的资源（一般作为公共角色用于快速授予预定义的权限）**
+* `Role, RoleBinding`：**`RoleBinding`所在命名空间的具体资源**
+
+#### 默认的ClusterRole和ClusterRoleBinding
+
+Kubernetes中提供了一组默认的ClusterRole和ClusterRoleBinding，这些资源会在每次API服务器启动时更新（防止意外删除和Kubernetes版本更新时的不兼容问题）。我们可以通过`kubectl get clusterrole/clusterrolebinding`来获取所有预定义的资源。最重要和最常用的一般有以下角色
+
+* `view`：只允许访问一个命名空间中的大多数资源，除了`Role`、`RoleBinding`、`Secret`（Secret中可能包含某个SA的Token，所以不允许读取）
+* `edit`：允许查看和修改命名空间中的大多数资源，同时可以读取和修改`Secret`，但是仍不允许读取`Role`和`RoleBinding`（防止权限扩散）
+* `admin`：允许查看和修改命名空间中的任何资源，除了`ResourceQuota`和命名空间自身（`Namespace`）
+  * `admin`与`edit`的区别在于是否能够读取和修改`Role`和`RoleBinding`\
+* `cluster-admin`：获得Kubernetes集群的完全控制权限
+
+Kubernetes中还存在其他默认的`ClusterRole`，这些`ClusterRole`都是以`system:`打头并且勇于各种Kubernetes组件中。比如Controller-Manager虽然作为一个Pod在运行，但是其中的每个控制器都会使用单独的`ClusterRole`和`ClusterRoleBinding`运行（以`system:controller:`为前缀）。
+
+在授予权限时，我们应该遵循**最小权限原则**，即只给每个人提供他们工作所需要的权限。一个比较好的想法是为每一组Pod创建特定的ServiceAccount，并把它与一个特定的`Role`和`RoleBinding`绑定。这样能有效减少入侵者获得集群控制权的可能性。
