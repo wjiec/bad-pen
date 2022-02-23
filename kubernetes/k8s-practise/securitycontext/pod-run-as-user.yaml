@@ -1,0 +1,28 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: run-as-user-222
+spec:
+  containers:
+    - name: app
+      image: alpine
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+      securityContext:
+        runAsUser: 222
+        runAsGroup: 555
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: run-as-user-333
+spec:
+  containers:
+    - name: app1
+      image: alpine
+      command: [ "/bin/sh", "-c", "--", "while :; do sleep 1d; done" ]
+    - name: app2
+      image: alpine
+      command: [ "/bin/sh", "-c", "--", "while :; do sleep 1d; done" ]
+  securityContext:
+    runAsUser: 333
+    runAsGroup: 555

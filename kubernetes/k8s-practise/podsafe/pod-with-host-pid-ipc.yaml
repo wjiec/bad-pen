@@ -1,0 +1,10 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pod-with-host-pid-ipc
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  hostPID: true
+  hostIPC: true

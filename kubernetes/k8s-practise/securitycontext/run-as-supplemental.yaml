@@ -1,0 +1,64 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: run-as-supplemental-share
+spec:
+  containers:
+    - name: apple
+      image: alpine
+      command: [ "/bin/sh", "-c", "--", "while :; do sleep 1d; done" ]
+      securityContext:
+        runAsUser: 111
+        runAsGroup: 111
+        readOnlyRootFilesystem: true
+      volumeMounts:
+        - name: shared
+          mountPath: /data
+    - name: banana
+      image: alpine
+      command: [ "/bin/sh", "-c", "--", "while :; do sleep 1d; done" ]
+      securityContext:
+        runAsUser: 222 # no group
+        readOnlyRootFilesystem: true
+      volumeMounts:
+        - name: shared
+          mountPath: /data
+  securityContext:
+    fsGroup: 522
+    supplementalGroups:
+      - 777
+      - 888
+  volumes:
+    - name: shared
+      emptyDir:
+        medium: Memory
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: run-as-supplemental-unshared
+spec:
+  containers:
+    - name: apple
+      image: alpine
+      command: [ "/bin/sh", "-c", "--", "while :; do sleep 1d; done" ]
+      securityContext:
+        runAsUser: 111
+        runAsGroup: 111
+        readOnlyRootFilesystem: true
+      volumeMounts:
+        - name: shared
+          mountPath: /data
+    - name: banana
+      image: alpine
+      command: [ "/bin/sh", "-c", "--", "while :; do sleep 1d; done" ]
+      securityContext:
+        runAsUser: 222 # no group
+        readOnlyRootFilesystem: true
+      volumeMounts:
+        - name: shared
+          mountPath: /data
+  volumes:
+    - name: shared
+      emptyDir:
+        medium: Memory

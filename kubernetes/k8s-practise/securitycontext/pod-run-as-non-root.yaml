@@ -1,0 +1,12 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: run-as-non-root
+spec:
+  containers:
+    - name: app
+      image: alpine
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+      securityContext:
+        runAsNonRoot: true
+        #runAsUser: 222

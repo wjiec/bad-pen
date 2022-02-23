@@ -1,0 +1,12 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pod-with-hostport
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      ports:
+        - name: http
+          containerPort: 8080
+          hostPort: 18080

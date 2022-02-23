@@ -1,0 +1,13 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: run-as-capabilities-drop
+spec:
+  containers:
+    - name: app
+      image: alpine
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+      securityContext:
+        capabilities:
+          drop:
+            - CHOWN

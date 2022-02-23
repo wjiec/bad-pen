@@ -1,0 +1,13 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: run-as-capabilities-add
+spec:
+  containers:
+    - name: app
+      image: alpine
+      command: ["/bin/sh", "-c", "--", "while :; do sleep 1d; done"]
+      securityContext:
+        capabilities:
+          add:
+            - SYS_TIME

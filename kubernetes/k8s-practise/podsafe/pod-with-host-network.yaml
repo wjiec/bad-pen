@@ -1,0 +1,9 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pod-with-node-network
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  hostNetwork: true

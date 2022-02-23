@@ -329,3 +329,226 @@ $ k exec run-as-supplemental-unshared --container banana -ti -- sh
 
 * `fsGroup`：在创建文件时起作用，会将文件的组改成`fsGroup`所定义
 * `supplemental`：定义用户所关联的额外的组（除`fsGroup`之外的组列表，`fsGroup`会自动添加）
+
+
+
+### 限制Pod使用安全相关的特性
+
+Kubernetes提供一种机制用于限制用户使用其中的部分功能，集群管理员可以通过创建`PodSecurityPolicy`资源来限制安全相关特性的使用。
+
+#### PodSecurityPolicy资源介绍（即将废弃）
+
+PodSecurityPolicy是一种集群级别的资源，它定义了用户能否在Pod中使用各种安全相关的特性。PodSecurityPolicy是通过集成在API服务器中的PSP准入（Admission）控制插件实现的，当有人向API服务器发送Pod资源时，PSP准入插件会将这个额Pod与配置的PSP进行校验，如果符合安全策略则会被存入etcd，否则将会被拒绝。
+
+#### PodSecurityPolicy可以做到哪些事
+
+一个PodSecurityPolicy可以定义一下事项
+
+* 是否允许Pod使用宿主节点的PID、IPC、网络命名空间：`psp.spec.hostPID/hostIPC/hostNetwork = true|false`
+* Pod允许绑定的宿主节点端口：`psp.spec.hostPorts.min/max`
+* 容器运行时允许使用的用户ID、文件系统组、关联组：`psp.spec.runAsUser/fsGroup/supplementalGroups`
+* 是否允许使用特权模式运行容器：`psp.spec.privileged`
+* 允许添加哪些内核功能、默认添加哪些内和功能、不允许使用哪些内核功能：`psp.spec.allowedCapabilities/defaultCapabilities/requiredDropCapabilities`
+* 允许容器使用哪些SELinux选项：`psp.spec.seLinux`
+* 容器是否允许使用可写的根文件系统：`psp.spec.readOnlyRootFilesystem`
+* 允许Pod使用哪些类型的存储卷：`psp.spec.volumes`
+
+```yaml
+kind: PodSecurityPolicy
+apiVersion: policy/v1beta1
+metadata:
+  name: psp-default
+spec:
+  hostPID: false
+  hostIPC: false
+  hostNetwork: false
+  hostPorts:
+    - min: 20000
+      max: 25000
+    - min: 50000
+      max: 55000
+  runAsUser:
+    rule: MustRunAs
+    ranges:
+      - min: 100
+        max: 200
+      - min: 1000
+        max: 1500
+  runAsGroup:
+    rule: MustRunAs
+    ranges:
+      - min: 100
+        max: 200
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+      - min: 1000
+        max: 1500
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+      - min: 1000
+        max: 1500
+  privileged: false
+  allowedCapabilities:
+    - SYS_TIME
+  defaultAddCapabilities:
+    - CHOWN
+  requiredDropCapabilities:
+    - SYS_ADMIN
+    - SYS_MODULE
+  seLinux:
+    rule: MustRunAs
+    seLinuxOptions: {}
+  readOnlyRootFilesystem: true
+  volumes:
+    - emptyDir
+    - configMap
+    - downwardAPI
+    - secret
+    - persistentVolumeClaim
+```
+
+#### 了解runAsUser、runAsGroup、fsGroup、supplementalGroups策略
+
+runAsUser、runAsGroup、fsGroup、supplementalGroups中可以通过`rule`制定策略，可选的值有
+
+* `runAsAny`：表示不做任何限制
+* `mustRunAs`：表示必须符合`ranges`中通过`min/max`定义的范围
+* `mustRunAsNonRoot`：表示不允许使用root运行容器，此时容器必须指定`runAsUser`字段
+
+**需要注意的是，策略对已经存在的Pod无效，因为psp资源仅在创建和升级Pod时起作用。**当部署容器时**指定的用户ID不在策略的允许范围之内会直接报错**，而如果**未指定用户ID而是使用镜像自带的用户的话则会被策略定义的用户ID覆盖**。
+
+#### 限制Pod可以使用的存储卷类型
+
+当我们有多个psp资源时，Pod可以使用多个psp中定义的`volumes`的并集中的任何一个存储卷。最低限度上，一个psp资源需要允许Pod使用以下类型的存储卷
+
+* emptyDir
+* configMap
+* secret
+* downwardAPI
+* persistentVolumeClaim
+
+#### 对不同用户和组分配不同的PodSecurityPolicy
+
+对不同用户分配不同的psp是通过RBAC机制实现的，假设我们存在以下两个psp规则
+
+* `default`：不允许使用特权模式
+* `privileged`：允许使用特权模式
+
+我们可以使用以下命令来创建对应的RBAC规则来拒绝除了bob之外的所有用户的允许特权模式容器的请求
+
+```bash
+$ kubectl create clusterrole psp-default --verb use --resource podsecuritypolicy --resource-name default
+$ kubectl create clusterrole psp-privileged --verb use --resource podsecuritypolicy --resource-name privileged
+
+$ kubectl create clusterrolebinding psp-all-users --clusterrole psp-default --group system:authenticated
+$ kubectl create clusterrolebinding psp-bob --clusterrole psp-privileged --user bob
+```
+
+
+
+### 隔离Pod的网络
+
+通过限制Pod可以与哪些Pod通信来确保Pod之间的网络安全。是否可以进行这些配置取决于集群中使用的容器网络插件，如果网络插件支持，可以通过NetworkPolicy资源配置网络隔离。
+
+一个NetworkPolicy会应用在匹配它标签选择器的Pod上，并指明这些Pod允许访问哪些Pod，或者哪些Pod允许访问它们。
+
+#### 在一个命名空间中启用网络隔离
+
+在默认情况下，某一命名空间中的Pod可以被任意来源访问，我们可以通过创建一个NetworkPolicy来拒绝其他任何客户端的访问
+
+```yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: deny-all
+spec:
+  podSelector: {} # 空的标签选择器匹配所有的Pod
+```
+
+在某个命名空间下创建该NetworkPolicy后，任何客户端都不能访问该命名空间中的Pod。
+
+#### 允许同一命名空间中的部分Pod访问一个Pod
+
+我们可以定义在同一个命名空间中的Pod只能接收哪些Pod的访问（通过`podSelector`）
+
+```yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: database-from-webserver
+spec:
+  podSelector:
+    matchLabels:
+      app: database # 配置带有app=database的Pod的规则
+  ingress: # 配置入站来源
+    - from:
+      - podSelector:
+          matchLabels:
+            app: webserver # 仅允许app=webserver的Pod访问
+      ports: # 仅允许访问以下端口
+        - port: 3306
+        - port: 5432
+```
+
+我们通过`podSelector`配置策略”针对的对象“，通过`ingress`和`egress`来配置出入站的规则。以上我们针对`app=database`的Pod配置如下规则
+
+* `ingress.from.podSelector`：只允许`app=webserver`的Pod的”入站“请求
+* `ingress.ports`：只允许访问`3306`和`5432`端口
+
+#### 在不同命名空间之间进行网络隔离
+
+当我们需要配置某一个Pod只允许某写命名空间中的Pod来访问（通过`namespaceSelector`）
+
+```yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: database-from-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: database
+  ingress:
+    - from:
+        - namespaceSelector:
+            - matchLabels:
+                user: alice
+      ports:
+        - port: 3306
+        - port: 5432
+```
+
+以上我们针对`app=database`的Pod配置如下规则
+
+* `ingress.from.namespaceSelector`：只允许有`user-alice`标签的命名空间中的Pod的”入站“请求
+* `ingress.ports`：只允许访问`3306`和`5432`端口
+
+#### 使用CIDR隔离网络
+
+我们也可以直接使用CIDR表示法来指定一个地址段
+
+```yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: webserver-cidr
+spec:
+  podSelector:
+    matchLabels:
+      app: webserver
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.0/16
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.1.0/24
+```
+
+以上我们针对`app=webserver`的Pod配置如下规则
+
+* `ingress.from.ipBlock`：只允许IP地址段为`10.0.0.0/16`的Pod访问
+* `egress.to.ipBlock`：只允许webserver访问`10.0.1.0/24`的Pod
