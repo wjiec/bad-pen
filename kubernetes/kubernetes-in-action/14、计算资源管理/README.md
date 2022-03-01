@@ -224,3 +224,111 @@ spec:
 
 
 ### 限制命名空间中的可用资源总量
+
+LimitRange只应用于单独的Pod，而我们同时也需要一种手段可以限制命名空间中的可用资源总量。Kubernetes通过ResourceQuota资源来实现。
+
+#### ResourceQuota资源
+
+ResourceQuota准入插件会检查将要创建的Pod是否会引起当前命名空间中Pod的总资源量超出ResourceQuota配置的值。同样ResourceQuota仅仅作用域在其后创建的Pod（并不存在已经存在的Pod）。
+
+ResourceQuota不仅可以限制一个命名空间中Pod和PVC存储最多可以使用的资源总量。同时也可以限制用户在一个命名空间可以创建的Pod、PVC以及其他API资源的数量。
+
+#### 创建ResourceQuota
+
+与LimitRange一样，ResourceQuota对象应用于它所在的命名空间，但不同的是ResourceQuota可以限制所有Pod资源的requests和limits总量，而LimitRange只能应用于每个单独的Pod或容器。
+
+```yaml
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: cpu-and-mem
+spec:
+  hard:
+    requests.cpu: 2000m
+    requests.memory: 2Gi
+    limits.cpu: 4000m
+    limits.memory: 4Gi
+```
+
+**注意：创建ResourceQuota时往往需要随之创建LimitRange资源，否则API服务会因为没有设置requests和limits直接拒绝接收该Pod的创建请求。**
+
+#### 为持久化存储指定配额
+
+ResourceQuota对象同样可以限制某个命名空间中最多可以声明的持久化存储总量
+
+```yaml
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: storage
+spec:
+  hard:
+    requests.storage: 10Gi
+    ssd.storageclass.storage.k8s.io/requests.storage: 2Gi
+    hdd.storageclass.storage.k8s.io/requests.storage: 20Gi
+```
+
+除了常规的`requests.storage`之外，我们还可以针对名字为`ssd`或`hdd`的StorageClass（动态提供`PersistentVolume`）进行限制（名称为`<sc-name>.storageclass.storage.k8s.io/<resource>`）。
+
+#### 限制可创建对象的数量
+
+ResourceQuota同样可以限制单个命名空间中的Pod、ReplicationController、Service等对象的个数
+
+```yaml
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: object-count
+spec:
+  hard:
+    count/pod: "10"
+    count/replicationcontrollers: "5"
+    count/secrets: "20"
+    count/configmaps: "10"
+    count/persistentvolumeclaims: "3"
+    count/services: "5"
+    count/services.loadbalancers: "2"
+    count/services.nodeports: "1"
+    count/ssd.storageclass.storage.k8s.io/persistentvolumeclaims: "3"
+    # see https://kubernetes.io/docs/concepts/policy/resource-quotas/
+```
+
+甚至我们可以为ResourceQuota对象本身设置数量限制
+
+#### 为特定的Pod状态或者QoS等级指定ResourceQuota
+
+ResourceQuota可以被一组`quota scopes`限制作用域。支持的作用域选择器有
+
+* `Terminating`：设置了`.spec.activeDeadlineSeconds >= 0`的Pod
+* `NotTerminating`：未设置`.spec.activeDeadlineSeconds`的Pod
+* `BestEffort`：具有`BestEffort`等级的Pod
+* `NotBestEffort`：非`BestEffort`的Pod（即：`Burstable,Guaranteed`）
+* `PriorityClass`：指定QoS等级的Pod
+* `CrossNamespacePodAffinity`：Match pods that have cross-namespace pod [(anti)affinity terms](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node).
+
+```yaml
+apiVersion: v1
+  kind: ResourceQuota
+  metadata:
+    name: pods-high
+  spec:
+    hard:
+      cpu: "1000"
+      memory: 200Gi
+      pods: "10"
+    scopeSelector:
+      matchExpressions:
+        - operator : In
+          scopeName: PriorityClass
+          values: ["high"]
+```
+
+
+
+### 监控Pod的资源使用量
+
+kubelet保护一个名为cAdvisor的agent，它会收集整个节点和节点上运行的所有单独容器的资源消耗情况。我们可以部署一个Heapster来收集这些数据，并通过`kubectl top node/pod <pod-name>`来查看节点或者单个Pod的**资源实际使用量**（在`kubectl describe nodes`中看到的是requests和limits）。
+
+#### 保存并分析历史资源的使用统计情况
+
+cAdvisor或Heapster都只保存一个很短时间窗口内的资源使用数据，如果需要分析一段时间的资源使用情况下就必须使用额外的工具，比如`InfluxDB + Grafana`（可以通过Pod部署在Kubernetes中）。
