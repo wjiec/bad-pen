@@ -327,7 +327,7 @@ apiVersion: v1
 
 ### 监控Pod的资源使用量
 
-kubelet保护一个名为cAdvisor的agent，它会收集整个节点和节点上运行的所有单独容器的资源消耗情况。我们可以部署一个Heapster来收集这些数据，并通过`kubectl top node/pod <pod-name>`来查看节点或者单个Pod的**资源实际使用量**（在`kubectl describe nodes`中看到的是requests和limits）。
+kubelet保护一个名为cAdvisor的agent，它会收集整个节点和节点上运行的所有单独容器的资源消耗情况。我们可以部署一个~~Heapster~~（Metrics Server）来收集这些数据，并通过`kubectl top node/pod <pod-name>`来查看节点或者单个Pod的**资源实际使用量**（在`kubectl describe nodes`中看到的是requests和limits）。
 
 #### 保存并分析历史资源的使用统计情况
 
