@@ -1,0 +1,13 @@
+kind: LimitRange
+apiVersion: v1
+metadata:
+  name: container-limited
+spec:
+  limits:
+    - type: Container
+      min:
+        cpu: 50m
+        memory: 32Mi
+      max:
+        cpu: 1000m
+        memory: 256Mi

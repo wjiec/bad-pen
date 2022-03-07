@@ -1,0 +1,15 @@
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: object-count
+spec:
+  hard:
+    count/pod: "10"
+    count/replicationcontrollers: "5"
+    count/secrets: "20"
+    count/configmaps: "10"
+    count/persistentvolumeclaims: "3"
+    count/services: "5"
+    count/services.loadbalancers: "2"
+    count/services.nodeports: "1"
+    count/ssd.storageclass.storage.k8s.io/persistentvolumeclaims: "3"

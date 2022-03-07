@@ -1,0 +1,17 @@
+kind: HorizontalPodAutoscaler
+apiVersion: autoscaling/v2beta2
+metadata:
+  name: http-whoami-cpu-70
+spec:
+  minReplicas: 1
+  maxReplicas: 5
+  scaleTargetRef:
+    kind: Deployments
+    name: http-whoami
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: AverageValue
+          averageUtilization: 70

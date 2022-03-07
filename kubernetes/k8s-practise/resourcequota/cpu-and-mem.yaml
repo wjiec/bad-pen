@@ -1,0 +1,10 @@
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: cpu-and-mem
+spec:
+  hard:
+    requests.cpu: 2000m
+    requests.memory: 2Gi
+    limits.cpu: 4000m
+    limits.memory: 4Gi

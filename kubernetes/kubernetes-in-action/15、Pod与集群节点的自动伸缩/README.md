@@ -93,3 +93,22 @@ Autoscaler单次操作至多使副本数翻倍，且两次扩容操作之间的�
 
 ### Pod的纵向伸缩
 
+Pod的纵向伸缩通过VPA（VerticalPodAutoscaler）资源实现，具体可参考[Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler)。
+
+
+
+### 集群节点的横向伸缩
+
+Kubernetes支持在需要时立即从云服务提供者请求更多的节点，这通过ClusterAutoscaler资源实现。
+
+#### Cluster Autoscaler
+
+Cluster Autoscaler负责在由于节点资源不足而无法调度Pod到已有节点时自动部署新的节点，同时也会在节点长时间使用率低下时自动下线节点。
+
+##### 从云端基础架构请求新节点
+
+如果一个Pod被创建之后，Scheduler无法将其调度到任何一个已有节点，而ClusterAutoscaler发现这个不可调度Pod时就会从云服务商那请求创建一个新节点。
+
+##### 归还节点
+
+当节点利用率不足是，ClusterAutoscaler也会根据情况减少节点的数目，这是通过监控所有节点上请求（resources.requests）的CPU和内存资源来实现的。**只有当ClusterAutoscaler知道节点上运行的Pod能够重新调度到其他节点时这个节点才会被归还**。当一个节点被选中需要下线时，它首先会标记节点不可调度（通过`kubectl cordon`或者`kubectl drain`可以实现），随后将运行在节点上的Pod疏散到其他节点（删除容器并等待Rc，Rs等重新创建）。

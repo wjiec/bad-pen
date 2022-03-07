@@ -1,0 +1,15 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: limited-container
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      resources:
+        requests:
+          cpu: 200m
+          memory: 32Mi
+        limits:
+          cpu: 1000m
+          memory: 128Mi

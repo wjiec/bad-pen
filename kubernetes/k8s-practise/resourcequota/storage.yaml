@@ -1,0 +1,9 @@
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: storage
+spec:
+  hard:
+    requests.storage: 10Gi
+    ssd.storageclass.storage.k8s.io/requests.storage: 2Gi
+    hdd.storageclass.storage.k8s.io/requests.storage: 20Gi

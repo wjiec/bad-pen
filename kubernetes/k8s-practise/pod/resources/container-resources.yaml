@@ -1,0 +1,12 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: container-res
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      resources:
+        requests:
+          cpu: 100m
+          memory: 32Mi

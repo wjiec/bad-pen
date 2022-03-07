@@ -1,0 +1,13 @@
+kind: LimitRange
+apiVersion: v1
+metadata:
+  name: pod-limited
+spec:
+  limits:
+    - type: Pod
+      min:
+        cpu: 50m
+        memory: 32Mi
+      max:
+        cpu: 2000m
+        memory: 1Gi
