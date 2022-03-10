@@ -26,3 +26,9 @@ Kubernetes In Action
 [12、Kubernetes API服务器的安全防护](12、Kubernetes API服务器的安全防护/README.md)
 
 [13、保障集群内节点和网络安全](13、保障集群内节点和网络安全/README.md)
+
+[14、计算资源管理](14、计算资源管理/README.md) 
+
+[15、Pod与集群节点的自动伸缩](15、Pod与集群节点的自动伸缩/README.md) 
+
+[16、高级调度](16、高级调度/README.md) 
