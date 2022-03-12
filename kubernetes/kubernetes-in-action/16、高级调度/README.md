@@ -105,5 +105,76 @@ spec:
 
 
 
-### 使用节点亲缘性将Pod调度到特定节点上
+### 使用节点亲和性将Pod调度到特定节点上
+
+污点可以用来让Pod远离特定的节点，而节点亲和性则允许你通知Kubernetes将Pod调度（或者优先调度）到某些特定的节点上。
+
+#### 节点亲和性和节点选择器
+
+节点选择器的实现比较简单，只有满足指定要求的节点才能被调度，而节点亲和性除了支持选择特定条件的节点之外还可以根据条件选择优先调度的形式，如果因为资源等无法被调度，则会将其调度到其他节点上。
+
+#### 使用节点亲和性
+
+节点亲和性与节点选择器一样，都是通过节点的标签来进行选择的。我们可以在`pod.spec.affinity.nodeAffinity`中进行设置，如下所示
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: required-labels
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: arch
+              operator: In
+              values:
+                - armv7
+                - armv8
+```
+
+对于以上属性，`requiredDuringScheduling`表示需要在调度过程中生效，而`IgnoredDuringExecution`则表示忽略运行中的Pod（未来可能会支持`RequiredDuringExecution`特性，在节点标签被修改时自动对节点下的所有Pod执行检查并重新调度）。在`nodeSelectorTerms.matchExpressions`中的语法与`ReplicaSet`中的标签选择器类似，`key`指定需要查询的标签名，而`operator`则表示需要执行的操作（可选的有：`In, NotIn, Exists, NotExist, Gt, Lt`）。
+
+#### 调度时优先考虑某些节点
+
+与节点选择器不同，节点亲和性还可以指定调度时优先选择某些节点，这通过`nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`来指定。
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: preferred-labels
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 80
+          preference:
+            matchExpressions:
+              - key: arch
+                operator: In
+                values:
+                  - arm
+        - weight: 20
+          preference:
+            matchExpressions:
+              - key: gpu
+                operator: In
+                values:
+                  - "true"
+```
+
+以上表示将优先选择具有以上计算权重最高的节点。但是需要注意调度器除了节点亲和性的优先级函数，还存在其他的优先级函数会导致并不是所有的Pod都调度到某一类节点（比如`SelectorSpreadPriority`函数用于将属于同一个副本控制器的Pod放到不同的节点上以保障服务的可用性）。
+
+
+
+### 使用Pod亲和性与非亲和性对Pod进行协同部署
 

@@ -179,7 +179,7 @@ k scale rc http-whoami-rc --replicas=10
 
 我们可以使用适当的标签选择器创建新的Rc，并再次管理那些没有被一起删除的Pod。
 
-### 
+
 
 ### 使用ReplicaSet而不是ReplicationController
 
