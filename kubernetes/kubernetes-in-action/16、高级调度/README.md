@@ -178,3 +178,136 @@ spec:
 
 ### 使用Pod亲和性与非亲和性对Pod进行协同部署
 
+我们除了通过指定Pod与节点之间的亲和性之外，还可以通过指定Pod与Pod之间的亲和性来让Kubernetes将两个Pod部署在它觉得合适的地方，同时确保两个Pod是靠近的。
+
+#### 使用Pod亲和性将多个Pod部署在同一个节点上
+
+Pod亲和性也是靠标签进行匹配和选择的，如下YAML文件所示
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: database
+  labels:
+    app: database
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoiami
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname # 节点范围
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - database
+```
+
+以上内容会将`backend`创建在`database`所在节点上（由`topologyKey`指定范围）。当调度器检查到新Pod创建时会首先找出所有匹配`podAffinity`的所有Pod，并找出这些Pod中具有相同`kubernetes.io/hostname`标签的节点进行调度。
+
+**需要注意的是，Pod亲和性是带有双向亲和的属性，如果此时`database`被删除，重新调度后的Pod也会参考亲和性规则并调度到相同的节点上。**
+
+同时与节点亲和性一样，也可以使用`preferredDuringSchedulingIgnoredDuringExecution`来使用优选方案，如果所选节点无法调度新的Pod就会将其调度到其他节点上（需要指定权重）。
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoiami
+  affinity:
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 80
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: database
+        - weight: 20
+          podAffinityTerm:
+            topologyKey: kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                app: database
+```
+
+
+
+#### topologyKey的作用
+
+`topologyKey`表示**根据哪个标签挑选适合（近）的节点**，更详细点说调度器会将Pod调度到**与亲和Pod具有相同`topologyKey`标签的节点**上。比如我们有以下节点和对应的Pod
+
+* `noed1(gpu=amd)`：`aa(app=ml_py),bb(app=ml_cc)`
+* `noed2(gpu=nv)`：`cc(app=ml_py),dd(app=ml_cc)`
+* `node3(gpu=nv)`：`db1(app=database),be1(app=backend)`
+
+此时我们调度一个Pod
+
+* `topology=gpu && podAffinity=cc`：该Pod会具有相同【所选`ml3`所在节点`gpu`标签值】的节点node2和node3
+* `topology=gpu && podAffinity=aa`：该Pod会被调度到node1上
+
+#### 利用Pod的非亲和性分开调度Pod
+
+在Kubernetes中可以通过`podAntiAffinity`让Pod彼此远离，在具体场景中，如果两组Pod一起运行会影响彼此的性能或者希望同一组的Pod尽可能分散到不同的节点上，我们可以使用Pod的非亲和性调度方式，如下所示
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: websocket
+  labels:
+    app: websocket
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 80
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: gateway
+        - weight: 20
+          podAffinityTerm:
+            topologyKey: kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                app: websocket
+```
+
+以上YAML描述的`gateway`会自己与自己在`kubernetes.io/hostname`冲突，所以每个gateway实例会尽可能分布在不同的节点上。同时`gateway`与`websocket`在`kubernetes.io/zone`上尽可能分开部署。

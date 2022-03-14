@@ -1,0 +1,12 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: http-whoami-prod
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  tolerations:
+    - key: production
+      effect: NoSchedule
+      operator: Exists

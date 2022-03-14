@@ -1,0 +1,36 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: websocket
+  labels:
+    app: websocket
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 80
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: gateway
+        - weight: 20
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: websocket

@@ -1,0 +1,18 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: required-labels
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: arch
+              operator: In
+              values:
+                - armv7
+                - armv8

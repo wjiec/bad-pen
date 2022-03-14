@@ -1,0 +1,36 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: database
+  labels:
+    app: database
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoiami
+  affinity:
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 80
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: database
+        - weight: 20
+          podAffinityTerm:
+            topologyKey: kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                app: database

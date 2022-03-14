@@ -1,0 +1,25 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: preferred-labels
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 80
+          preference:
+            matchExpressions:
+              - key: arch
+                operator: In
+                values:
+                  - arm
+        - weight: 20
+          preference:
+            matchExpressions:
+              - key: gpu
+                operator: In
+                values:
+                  - "true"
