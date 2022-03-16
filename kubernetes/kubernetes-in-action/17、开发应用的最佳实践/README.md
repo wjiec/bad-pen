@@ -64,3 +64,92 @@ Pod中运行的应用程序随时有可能被杀死，因为Kubernetes可能需�
 
 #### 以固定的顺序启动Pod
 
+Kubernetes与运维人员手动部署应用有一点不同，运维人员知道应用间的依赖关系这样他们就可以按照顺序来启动应用。而Kubernets没有内置的方法来先运行某些Pod然后等这些Pod运行成功后再运行其他Pod（Kubernetes的确是按照YAML文件中定义的顺序来处理的，但是这只保证它们被写到etcd的时候是有顺序的，而无法确保Pod会按这个顺序启动）。
+
+**但是我们可以阻止一个主容器的启动，直到它的前置条件被满足。这是通过在Pod中包含一个叫做init的容器实现的。**
+
+##### init容器使用
+
+Pod中的init容器可以用来初始化Pod，比如往容器的存储卷中写入数据，然后再将这个存储卷挂载到主容器中。一个Pod可以拥有任意数量的init容器且init容器是顺序执行的，当且仅当最后一个init容器执行完毕之后才会启动主容器。如下所示
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: init-container
+spec:
+  containers:
+    - name: app
+      image: http-whoami
+      volumeMounts:
+        - name: www-data
+          mountPath: /html
+  initContainers:
+    - name: first
+      image: alpine
+      command:
+        - sh
+        - -c
+        - "touch /html/first && sleep 30"
+      volumeMounts:
+        - name: www-data
+          mountPath: /html
+    - name: second
+      image: alpine
+      command:
+        - sh
+        - -c
+        - "touch /html/second && sleep 60"
+      volumeMounts:
+        - name: www-data
+          mountPath: /html
+  volumes:
+    - name: www-data
+      emptyDir:
+        medium: Memory
+```
+
+通过init容器来延迟Pod主容器的启动，直到Pod的前置条件被满足为止。但是更好的做法是我们的应用不需要所依赖的组件都准备好才能启动（延时加载等），我们也可以通过**就绪探针来通知Kubernetes**当前应用还没准备好（依赖还没启动，循环等待），这样**能避免未就绪的应用成为服务的端点（Endpoint）且能在Deployment升级过程中生效避免错误版本出现**。
+
+#### 增加生命周期钩子
+
+除了通过init容器来介入Pod的启动过程之外，Pod还允许定义两种类型的生命周期钩子
+
+* 启动后（`Post-Start`）钩子
+* 停止前（`Pre-Stop`）钩子
+
+这些生命周期钩子是基于单独的容器来指定的（init容器影响的是整个Pod），这些钩子与探针类似可以执行以下这些操作
+
+* 在容器内部执行一个命令
+* 向一个URL发送HTTP GET请求
+* 发起一个Socket TCP连接
+
+##### 使用生命周期钩子
+
+**启动后钩子是在容器的主进程启动之后执行**的，它可以在应用启动时做一些额外的工作（比如执行一些通知或者初始化一些数据来让应用程序更顺利的运行）。**启动前钩子是与主进程并行执行的，如果钩子未执行完成退出则Pod处于`ContainerCreating`状态，且如果钩子执行失败或者返回了一个非零值，主容器会被直接杀死。**如果启动前钩子执行失败是无法在日志中看到详细信息，只能在Pod描述中看到一个`FailedPostSTartHook`事件（可以将钩子的输出内容写到容器的文件系统（持久卷）中）。
+
+**停止前钩子是在容器被终止之前立即执行**，当一个容器需要终止运行时，kubelet会在配置了停止前钩子的容器上执行这个钩子，并且仅在执行完钩子程序后才会向容器进程发送`SIGTERM`信号（优雅终止）。
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: container-hook
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      lifecycle:
+        postStart:
+          exec:
+            command: # 未执行完成Pod处于`ContainerCreating`状态
+              - sh
+              - -c
+              - "touch /pre-start && sleep 60"
+        preStop:
+          httpGet: # host的默认值是Pod的IP地址
+            port: 8080
+            path: /shutdown
+```
+
+#### 了解Pod的关闭
