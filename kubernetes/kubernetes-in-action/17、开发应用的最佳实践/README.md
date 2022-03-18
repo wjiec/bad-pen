@@ -214,3 +214,79 @@ spec:
 
 ### 让应用程序在Kubernets中方便运行和管理
 
+接下来我们需要构建方便在Kubernetes中管理的应用
+
+#### 构建可管理的容器镜像
+
+构建的应用镜像应该包括应用的可执行文件和它的依赖库，在这个基础上应用镜像应该尽可能的小而且不包含任何无用的东西（可以使用多阶段构建来缩减镜像的体积和保证镜像的纯净）。
+
+#### 合理地给镜像打标签并正确使用ImagePullPolicy
+
+在构建应用镜像时应该使用版本化的标签（甚至可以加上构建时间信息，只保留年月日即可），如果只使用`latest`标签会导致我们无法回退到之前的版本（除非我们重新推送了旧版本的镜像）。使用版本化的标签不仅有助于在Deployment，StatefulSet中快速回退版本，也有助于我们更好的观察Pod是否被更新。
+
+当我们使用固定的标签（如`latest`）时，同时需要配置`pod.spec.imagePullPolicy`为`Always`，这会导致每次部署Pod都会尝试重新拉取镜像，会拖慢Pod的启动速度，同时这个策略会导致无法连接到镜像仓库时Pod无法启动。
+
+#### 使用多维度的标签进行管理
+
+我们最好给所有的资源（不仅仅是Pod）都打上标签，标签可以包含以下这些内容
+
+* 资源所属的应用的名称
+* 应用层级（后端、前端等等）
+* 运行环境（开发、测试、预发布、生成等等）
+* 版本号
+* 发布类型（稳定版、金丝雀等）
+
+标签管理可以让你以组的方式来管理资源，从而很容易了解资源的归属。
+
+#### 通过注解描述资源
+
+资源应该至少包含一个“描述资源”的注解和一个“描述负责人”的注解。在微服务系统中，每个微服务最好还可以包含一个注解用来“描述该服务所依赖的其他服务的名称”
+
+#### 给进程终止提供更多信息
+
+当容器持续终止运行的时候，我们可以把有关异常关闭的调试信息都写到日志中。在Kubernetes中有一个特性可以从Pod状态中很容易的看到容器终止的原因。我们可以向一个文件中写入详细的信息，随后这个消息就会被kubelet读取并显示在`kubectl describe pod <pod-name>`中。这个文件的默认路径是`/dev/termination-log`（也可以通过`spec.containers.terminationMessagePath`）进行修改
+
+```yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: termination-message
+spec:
+  containers:
+    - name: app
+      image: alpine
+      command:
+        - sh
+        - -c
+        - "echo 'backtrace message from application' > /var/termination-reason; exit 1"
+      terminationMessagePath: /var/termination-reason
+      terminationMessagePolicy: FallbackToLogsOnError
+```
+
+以上`terminationMessagePath`表示需要读取的退出原因的文件名。而`terminationMessagePolicy`可以配置为`File`或者`FallbackToLogsOnError`。默认吗的`File`会从指定的文件中读取，而`FallbackToLogsOnError`则会在文件内容为空的情况下读取容器的最后几行日志当做终止消息（**只有在异常退出的情况下才会显示**）。
+
+#### 处理应用日志
+
+应用程序应该将日志写到标准输出力而不是文件中，这样就可以很容易的通过`kubectl logs`来查看应用日志。在生产环境中应该使用一个集中式的面向集群的日志解决方案，我们会将所有的容器日志收集并永久地存储到一个中心化得位置。常见的方案有`ELK(ElasticSearch, Logstash, Kibana)`等。
+
+##### 处理多行日志
+
+进行日志收集的时候一般都是一行一行进行读取并保存到数据库中的，当输出多行数据时就会导致一个日志被当做多个条目保存到数据库中，解决的方法也很简单，我们可以输出JSON格式的日志但是不利于用户查看。更佳的方案是同时输出到文件（JSON格式）和标准输出（可读性）上。
+
+
+
+### 开发和测试的最佳实践
+
+每个人都需要找到适合自己的最佳方式
+
+#### 开发过程中在Kubernetes之外运行应用
+
+开发一个应用时，我们不需要每次测试都在Kubernetes中运行，可以在自己的机器上进行开发和运行，如果应用程序依赖于Kubernetes中的一些功能，可以通过比如`NodePort`或者`kubectl proxy`来让我们在Kubernets之外使用集群内的服务。
+
+#### 在开发过程中使用minikube
+
+我们还可以在本地运行一个minikube集群并将应用程序放到本地集群中运行和测试。我们基于minikube还可以将本地文件通过minikube VM挂载到容器中进行热更新和测试。
+
+#### 发布版本和自动部署资源
+
+一个比较好的实践是将资源的manifest文件存放到一个版本控制系统中，这样可以方便做代码评审，审计追踪，或者是在任何需要的时候回退更改。通过还可以基于版本管理的Webhook甚至CICD来自动化将更改和新资源更新到集群中。

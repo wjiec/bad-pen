@@ -1,0 +1,19 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: container-hook
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      lifecycle:
+        postStart:
+          exec:
+            command:
+              - sh
+              - -c
+              - "touch /pre-start && sleep 60"
+        preStop:
+          httpGet:
+            port: 8080
+            path: /shutdown

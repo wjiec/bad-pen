@@ -1,0 +1,34 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: init-container
+spec:
+  containers:
+    - name: app
+      image: laboys/http-whoami
+      volumeMounts:
+        - name: www-data
+          mountPath: /html
+  initContainers:
+    - name: first
+      image: alpine
+      command:
+        - sh
+        - -c
+        - "touch /html/first && sleep 30"
+      volumeMounts:
+        - name: www-data
+          mountPath: /html
+    - name: second
+      image: alpine
+      command:
+        - sh
+        - -c
+        - "touch /html/second && sleep 60"
+      volumeMounts:
+        - name: www-data
+          mountPath: /html
+  volumes:
+    - name: www-data
+      emptyDir:
+        medium: Memory

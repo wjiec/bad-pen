@@ -1,0 +1,14 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: termination-message
+spec:
+  containers:
+    - name: app
+      image: alpine
+      command:
+        - sh
+        - -c
+        - "echo 'backtrace message from application' > /var/termination-reason; exit 1"
+      terminationMessagePath: /var/termination-reason
+      terminationMessagePolicy: FallbackToLogsOnError
