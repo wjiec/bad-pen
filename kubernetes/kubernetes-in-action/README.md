@@ -34,3 +34,5 @@ Kubernetes In Action
 [16、高级调度](16、高级调度/README.md)
 
 [17、开发应用的最佳实践](17、开发应用的最佳实践/README.md)
+
+[18、Kubernetes应用扩展](18、Kubernetes应用扩展/README.md)
