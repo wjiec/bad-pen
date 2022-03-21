@@ -104,3 +104,31 @@ roleRef:
 
 ### 使用Kubernetes服务目录扩展Kubernetes
 
+服务目录是Kubernetes的扩展内容，使用服务目录可以让运行在Kubernetes中的应用程序轻松地使用外部托管的软件产品（可运行在集群内也可通过代理运行在集群之外）。
+
+#### 服务目录资源
+
+服务目录会添加以下四种通用的资源：
+
+* `ClusterServiceBroker`：描述一个可提供服务的外部系统（服务提供商的地址）
+
+* `ClusterServiceClass`：用于描述可供应的服务类型（比如MySQL、PostgreSQL、Redis等，类比StorageClass）
+* `ServiceInstance`：表示根据`ClusterServiceClass`所创建的具体服务实例（类比PV）
+* `ServiceBinding`：表示将服务实例与哪些资源进行关联绑定（类比PVC）
+
+当我们创建一个`ClusterServiceBroker`并配置外部系统所提供的服务列表URL，集群就会从配置的地址中拉取服务列表并为每个服务创建一个`ClusterServiceClass`资源。每个`ClusterServiceClass`资源都表示一个服务类型（比如MySQL，PostgreSQL等），每个`ClusterServiceClass`都会关联一个或多个服务方案（比如主从、异地多备等）。
+
+#### 提供服务与使用服务
+
+当需要某个服务时，就直接创建一个`ServiceInstance`资源并在其中指定所需要`ClusterServiceClass`的名字和相对应的服务方案（plan），接下来`ClusterServiceBroker`就会收到这个请求并为我们创建一个对应的服务（这个服务可能在集群内也可能在集群外）。
+
+接下来我们可以将`ClusterInstance`与集群内资源进行绑定，比如与一个`Secret`绑定并将访问服务实例所需的内容放到`Secret`中。
+
+#### 解除绑定与取消服务
+
+一旦不需要服务绑定，就可以通过`kubectl delete servicebinding <binding-name>`来删除绑定，此时服务实例会继续运行且可以给服务实例继续绑定。当我们不需要服务实例时，可以通过`kubectl delete serviceinstance <instance-name>`删除一个服务。
+
+
+
+### 基于Kubernetes搭建的平台
+
