@@ -1,0 +1,7 @@
+kind: Website
+apiVersion: example.com/v1
+metadata:
+  name: hello.example.com
+spec:
+  domain: hello.example.com
+  gitRepo: https://git.example.com/project-x/docs

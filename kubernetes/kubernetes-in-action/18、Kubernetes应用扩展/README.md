@@ -132,3 +132,12 @@ roleRef:
 
 ### 基于Kubernetes搭建的平台
 
+基于Kubernetes构建的最著名的PaaS系统包括Deis Workflo和Red Hat的OpenShift。
+
+#### OpenShift容器平台
+
+OpenShift提供了一些在Kubernetes中未提供的功能，如用户管理和群组管理，这能让我们在Kubernets之上运行安全的多用户环境。OpenShift最好的特性之一是与包含程序源代码的Git存储库进行了深度绑定，用户可以在OpenShift集群中快速构建和部署应用程序。
+
+#### Helm
+
+Helm是一个Kubernetes包管理器，它由一个`helm`的客户端程序和一个服务端`Tiller`程序组成（新版本已废弃）。Helm应用程序包被称为图表（Chart），它们与配置结合在一起且合并到图表中以创建一个发行版本（Release），这就可以创建一个应用程序的实例了（包括Development、Service、PVC等）
