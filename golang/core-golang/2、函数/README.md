@@ -17,11 +17,34 @@
 
 ### defer
 
-Go函数里提供了`defer`关键字，可以注册多个延迟调用，这些调用以先进后出（FILO）的顺序在函数返回前被执行。`defer`后面必须是函数或方法的调用，不能是语句，否则会报`expression in defer must be function call`。
+Go函数里提供了`defer`关键字，可以注册多个延迟调用，这些调用以先进后出（FILO）的顺序在函数返回前被执行。`defer`后面必须是函数或方法的调用，不能是语句，否则会报`expression in defer must be function call`。注意以下例子输出
+
+```go
+type Actor func(string) Actor
+
+func Do(s string) Actor {
+	fmt.Println(s)
+
+	return Do
+}
+
+func TestDefer() {
+	defer Do("A")("B")("C")("D")
+}
+
+func main() {
+    // A B C D
+	TestDefer()
+}
+```
+
+
 
 `defer`语句必须先注册后才能执行，如果`defer`位于`return`之后，则`defer`会因为没有注册而不会执行。**当主动调用`os.Exit(status)`退出进程时，即使已经注册的`defer`也不会执行**。
 
 `defer`的好处是可以在一定程度上避免资源泄露，特别是在有很多`return`语句且有很多资源需要关闭的场景中。**同时也要注意到`defer`会推迟资源的释放时间，可能导致大量内存或系统资源得不到释放。另外，`defer`相对于普通的函数调用需要间接的数据结构支持，相对于普通函数调用有一定的性能损耗**。
+
+
 
 
 
