@@ -23,18 +23,18 @@ Go函数里提供了`defer`关键字，可以注册多个延迟调用，这些�
 type Actor func(string) Actor
 
 func Do(s string) Actor {
-	fmt.Println(s)
+    fmt.Println(s)
 
-	return Do
+    return Do
 }
 
 func TestDefer() {
-	defer Do("A")("B")("C")("D")
+    defer Do("A")("B")("C")("D")
 }
 
 func main() {
     // A B C D
-	TestDefer()
+    TestDefer()
 }
 ```
 
@@ -49,4 +49,90 @@ func main() {
 
 
 ### 闭包
+
+闭包是由**函数**及其所**引用的数据**组合而成而实体。闭包对闭包外的数据是直接引入，一旦编译器检测到闭包，就会将闭包所引用的外部变量分配到堆上（内存逃逸）。
+
+**对象是带有行为的数据，而闭包是带有数据的行为**。
+
+#### 闭包引用数据的规则
+
+1、函数返回的闭包所引用的局部变量是不同的副本（形参其实也是一个局部变量，每次调用函数都会为局部变量分配内存）
+
+2、闭包所引用的数据在多次调用时是共享的，即可以多次修改引用的数据
+
+```go
+type Action func(int) int
+
+func Accumulate(base int) Action {
+    return func(i int) int {
+        fmt.Printf("&base = %p\n", &base)
+        base += i
+        return base
+    }
+}
+
+func main() {
+    add1 := Accumulate(1)
+    add2 := Accumulate(1)
+
+    fmt.Println("add1(10) =", add1(10))
+    fmt.Println("add2(20) =", add2(20))
+
+    fmt.Println("add1(30) =", add1(30))
+    fmt.Println("add2(40) =", add2(40))
+    // &base = 0xc000012088
+    // add1(10) = 11
+    //
+    // &base = 0xc0000120a0
+    // add2(20) = 21
+    //
+    // &base = 0xc000012088
+    // add1(30) = 41
+    //
+    // &base = 0xc0000120a0
+    // add2(40) = 61
+}
+```
+
+3、在闭包中修改全局变量对所有闭包均可见
+
+4、多个闭包所引用的局部变量是共享的
+
+```go
+type Action func(int) int
+
+func Accumulate(base int) Action {
+    return func(i int) int {
+        fmt.Printf("&base = %p\n", &base)
+        base += i
+        return base
+    }
+}
+
+func Combine(base int) (Action, Action) {
+    return func(i int) int {
+            base += i
+            return base
+        }, func(i int) int {
+            base -= i
+            return base
+        }
+}
+
+func main() {
+    c1, c2 := Combine(0)
+    fmt.Printf("c1(111) = %d\n", c1(111))
+    fmt.Printf("c2(222) = %d\n", c2(222))
+
+    fmt.Printf("c1(111) = %d\n", c1(111))
+    fmt.Printf("c2(222) = %d\n", c2(222))
+    
+    // c1(111) = 111
+    // c2(222) = -111
+    // c1(111) = 0
+    // c2(222) = -222
+}
+```
+
+
 
