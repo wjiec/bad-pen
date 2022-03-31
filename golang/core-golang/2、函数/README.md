@@ -136,3 +136,70 @@ func main() {
 
 
 
+### panic 和 recover
+
+有两种情况可以引发panic，一种是程序主动调用panic函数，另一种是程序产生运行时错误时由运行时检测并抛出。发生panic之后，程序会直接从调用panic函数处立即返回，并逐层向上执行函数的defer语句（如果有的话），直到**被derfer中的recover函数**捕获或退回到main函数最后异常退出。
+
+recover用来捕获panic，在通过recover捕获异常之后还可以再次调用panic抛出异常。同时注意**recover只有出现在derfer函数之中才能捕获panic**且不能嵌套。
+
+```go
+func main() {
+	defer func() {
+		fmt.Printf("first: %v\n", recover())
+	}()
+
+	defer func() {
+		func() {
+			fmt.Printf("second: %v\n", recover())
+		}()
+	}()
+
+	defer fmt.Printf("third: %v\n", recover())
+
+	defer recover()
+
+	panic("panic message")
+	// third: <nil>
+	// second: <nil>
+	// first: panic message
+}
+```
+
+init函数引发的panic只能在init函数中捕获，无法在main中捕获，因为init函数会在main函数之前执行。**函数并不能捕获在其中启动的goroutine所抛出的panic**。
+
+#### 使用场景
+
+panic一般有以下两种情况会使用到：
+
+1、程序遇到了无法正常执行下去的错误，主动调用panic结束程序
+
+2、在调试程序时，通过主动调用panic快速退出程序，同时panic打印出的堆栈信息能够更快速的定位错误。
+
+
+
+### 错误处理
+
+Go语言内置错误接口类型为`error`，在Go中典型的错误处理方式是将error作为函数的最后一个返回值。
+
+#### 处理错误和异常
+
+错误和异常可以按如下方式进行区分：
+
+* 广义的错误：发生了非预期的行为
+* 狭义的错误：发生了已知且预期的行为
+* 异常：发生了非预期的未知行为
+
+因为Go是一门类型安全的语言，其运行时一般不会出现一些编译或运行时都无法捕获的异常。所以在Go中需要处理的错误可以分为两类：
+
+* 运行时错误：由运行时捕获并隐式或显式抛出
+* 程序逻辑错误：程序的执行结果不符合预期，但是不会引发异常
+
+在实际的编程中，error和panic应该遵循以下规则：
+
+* 程序发生的错误导致程序不能继续执行下去了，此时程序应该主动调用panic或由运行时抛出异常
+* 程序虽然发生错误，但是是可预期且能恢复的，那就应该使用返回值的方式处理错误，或者在可能发生运行时错误的地方使用recover捕获panic。
+
+
+
+### 底层实现
+
