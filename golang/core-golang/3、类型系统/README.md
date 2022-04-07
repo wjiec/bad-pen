@@ -166,3 +166,82 @@ func (m Map) Each() {
 
 ### 方法调用
 
+方法调用的一般形式是`instance.MethodName(ParamList)`。除此之外，我们还可以通过方法值（`method value`）或者方法表达式（`method expression`）来调用方法。
+
+
+
+#### 方法值
+
+我们可以通过将实例（v）对应的类型（T）上的方法（M）赋值给一个变量（f），并通过`f(ParamList)`的方式调用。`v.M`被称为方法值（Method Value）。方法值其实就是一个函数类型的变量，可以向普通的函数一样使用。
+
+方法值在底层的实现上就是一个带有闭包的函数变量，与其他带有闭包的匿名函数类似，接收器（receiver）被隐式绑定到方法值（Method Value）的闭包环境内。
+
+```go
+type Person struct {
+	Name string
+}
+
+func (p *Person) SetName(name string) {
+	p.Name = name
+	fmt.Printf("&person = %p\n", p)
+}
+
+func main() {
+	p := Person{Name: "foo"}
+	p.SetName("bar")
+
+	m := p.SetName
+	m("baz")
+
+	// output:
+	//	&person = 0xc000040230
+	//	&person = 0xc000040230
+}
+```
+
+
+
+#### 方法表达式
+
+方法表达式相当于提供一种语法将类型方法调用显式转换为函数调用，必须显式地传递接收者。
+
+```go
+type Person struct {
+	Name string
+}
+
+func (p Person) GetName() string {
+	return p.Name
+}
+
+func (p *Person) SetName(name string) {
+	p.Name = name
+	fmt.Printf("&person = %p\n", p)
+}
+
+func main() {
+    // func(p Person) string
+	g := Person.GetName
+    // func(p *Person, name string)
+	s := (*Person).SetName
+	//s := Person.SetName
+	// invalid method expression Person.SetName (needs pointer receiver: (*Person).SetName)
+
+	p := Person{Name: "foo"}
+	fmt.Printf("method expression: g() = %s\n", g(p))
+
+	s(&p, "bar")
+	fmt.Printf("method expression: g() = %s\n", g(p))
+
+	// Output:
+	// 	method expression: g() = foo
+	//	&person = 0xc000040230
+	//	method expression: g() = bar	
+}
+```
+
+表达式`Person.GetName`和`(*Person).SetName`被称为方法表达式（Method Expression），这些方法得首个参数是接收器的实例或指针。需要注意这里接收器的类型需要与方法表达式的类型需要相匹配，否则编译器会报错（编译器不会在方法表达式里做自动转换）。
+
+
+
+#### 方法集
