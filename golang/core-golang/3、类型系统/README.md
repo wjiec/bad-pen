@@ -245,3 +245,34 @@ func main() {
 
 
 #### 方法集
+
+无论接收者是什么类型，方法和函数的实参传递都是值拷贝。如果接收者是值类型，则传递的就是值的副本；如果接收者是指针类型，则传递的是指针的副本。
+
+针对Golang中的方法集有以下结论：
+
+```text
+Values          Methods Receivers
+-----------------------------------------------
+T               (t T)
+*T              (t T) and (t *T)
+
+Methods Receivers    Values
+-----------------------------------------------
+(t T)                 T and *T
+(t *T)                *T
+```
+
+>1. If you have a `*T` you can call methods that have a receiver type of `*T` as well as methods that have a receiver type of `T` (the passage you quoted, [Method Sets](https://golang.org/ref/spec#Method_sets)).
+>2. If you have a `T` and it is [addressable](https://golang.org/ref/spec#Address_operators) you can call methods that have a receiver type of `*T` as well as methods that have a receiver type of `T`, because the method call `t.Meth()` will be equivalent to `(&t).Meth()` ([Calls](https://golang.org/ref/spec#Calls)).
+>3. If you have a `T` and it isn't addressable (for instance, the result of a function call, or the result of indexing into a map), Go can't get a pointer to it, so you can only call methods that have a receiver type of `T`, not `*T`.
+>4. If you have an interface `I`, and some or all of the methods in `I`'s method set are provided by methods with a receiver of `*T` (with the remainder being provided by methods with a receiver of `T`), then `*T` satisfies the interface `I`, but `T` doesn't. That is because `*T`'s method set includes `T`'s, but not the other way around (back to the first point again).
+>
+>In short, you can mix and match methods with value receivers and methods with pointer receivers, and use them with variables containing values and pointers, without worrying about which is which. Both will work, and the syntax is the same. However, if methods with pointer receivers are needed to satisfy an interface, then only a pointer will be assignable to the interface — a value won't be valid.
+
+
+
+#### 值调用和表达式调用的方法集
+
+1、通过类型字面量显式地进行值调用和表达式调用，在这种情况下编译器不会做自动转换，会进行严格的方法集检查。
+
+2、通过类型变量进行值调用和表达式调用，在使用值调用（method value）的情况下编译器才会进行自动转换，使用表达式调用（method expression）方法时编译器不会进行转换而是进行严格的方法集检查。
