@@ -335,3 +335,84 @@ c.Z = 3
 在Go中函数都是以值传递的方式调用的。如果传递给接口参数的是值类型，但调用方法的接收者是指针类型，则程序在运行时虽然能将接收者转换为指针，但是此时**指针是指向原本变量的副本的，并不是我们期望的原变量的指针**。所以语言设计者为了杜绝这种非期望的行为，在编译时做了严格的方法集的检查。
 
 如果传递给接口的变量是指针类型，而接口的实现是值类型的方法，程序会自动将指针转换为值类型，这种转换不会带来副作用，符合调用者的预期，所以这种转换是被允许的。
+
+
+
+### 函数类型
+
+使用`func FunctionName(int) {}`语法定义的函数被称为“具名函数（有名函数）”，而直接通过`func() {}`方法定义的函数被称为“匿名函数”。函数类型也分为两种，一种是函数字面量类型（未命名类型），一种是命令函数类型。
+
+
+
+#### 函数字面量类型
+
+函数字面量类型的语法表达式为`func(FuncParamList) ReturnList {}`，可以看出具名函数和匿名函数都属于函数字面量类型。具名函数的定义相当于初始化一个函数字面量类型然后将其赋值给一个函数名变量；而匿名函数的定义也是直接初始化一个函数字面量类型，只是没有将其绑定到一个具体的变量上。
+
+
+
+#### 命名函数类型
+
+通过`type TypeName FuncLiteral`可以将一个未命名函数字面量定义为一个命令函数类型。其中`TypeName`是新定义的命名函数类型，而`FuncLiteral`是函数字面量类型，同时其作为`TypeName `的底层类型。
+
+
+
+#### 函数签名
+
+所谓“函数签名”就是具名函数或匿名函数的函数字面量类型（`func(int) `）。所以具名函数和匿名函数的函数签名可以相同。
+
+
+
+#### 函数声明
+
+在Go语言中一般不需要使用到函数声明，只有在一些特殊场景下（比如调用汇编）才会使用到。
+
+```go
+// add.go
+// 函数声明 = 函数签名+函数名，但是没有函数体
+func Add(a int, b int) int
+
+// add.s
+TEXT ·Add, NOSPLIT, $24-0
+	MOVQ a+24(SP), AX
+	// ...
+```
+
+
+
+#### 为函数添加方法
+
+函数字面量是一个未命名类型，所以我们不能为其添加方法，必须显式地使用`type`定义一个命名函数类型，我们才能为其添加方法
+
+```go
+// net/http/server.go
+
+type Handler interface {
+	ServeHTTP(ResponseWriter, *Request)
+}
+
+// The HandlerFunc type is an adapter to allow the use of
+// ordinary functions as HTTP handlers. If f is a function
+// with the appropriate signature, HandlerFunc(f) is a
+// Handler that calls f.
+type HandlerFunc func(ResponseWriter, *Request)
+
+// ServeHTTP calls f(w, r).
+func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request) { // ** and here **
+	f(w, r)
+}
+
+// HandleFunc registers the handler function for the given pattern.
+func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request)) {
+	if handler == nil {
+		panic("http: nil handler")
+	}
+	mux.Handle(pattern, HandlerFunc(handler)) // ** here **
+}
+```
+
+通过以上对函数类型的使用，我们可以看到函数类型有如下意义：
+
+* 函数也是一种类型，并且可以在函数字面量的基础上定义一种命名函数类型（`type TypeName FunctionLiteral`）。
+* 具名函数和你们函数的签名与命名函数类型的底层类型相同，它们之间可以进行类型转换
+* 可以为命名函数类型添加方法，可以方便地为一个函数增加“拦截”或“过滤”等额外功能（相当于提供一种装饰器模式）
+* 为命名函数类型添加方法，打通了接口之间的关系，在使用接口的地方可以传递函数类型的变量。这为函数到接口的转换开启了大门。
