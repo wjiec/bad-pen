@@ -307,6 +307,11 @@ type interfacetype struct {
 	mhdr    []imethod
 }
 
+type imethod struct {
+	name nameOff
+	ityp typeOff
+}
+
 // Needs to be in sync with ../cmd/link/internal/ld/decodesym.go:/^func.commonsize,
 // ../cmd/compile/internal/reflectdata/reflect.go:/^func.dcommontype and
 // ../reflect/type.go:/^type.rtype.
@@ -337,6 +342,10 @@ type typeOff int32
 非空接口的底层数据结构是`iface`，代码位于`src/runtime/runtime2.go`
 
 ```go
+//
+// src/runtime/runtime2.go
+//
+
 type iface struct {
 	tab  *itab // 存放类型及方法指针信息
 	data unsafe.Pointer // 实例的副本
@@ -351,6 +360,10 @@ type iface struct {
 在`itab`中是接口内部实现的核心和基础
 
 ```go
+//
+// src/runtime/runtime2.go
+//
+
 // layout of Itab known to compilers
 // allocated in non-garbage-collected memory
 // Needs to be in sync with
@@ -367,8 +380,78 @@ type itab struct {
 
 在`itab`中有5个字段：
 
-* `inner`：指向接口自身元信息的指针（在RO段）
-* `_type`：是指向接口绑定的具体类型元数据的指针，`iface`里的`data`指针指向的是该类型的值。
-* `hash`：是接口绑定的具体类型的哈希值，这个值是从`_type.hash`字段拷贝出来，这里冗余主要是为了方便接口断言和接口查询时快速访问。
-* `fun`：是一个函数指针，可以理解为C++对象模型里面的虚拟函数指针。注意这个指针数组的大小是可变的，由编译器负责填充，运行时使用底层指针进行访问（不受数组越界的约束），数组里的指针指向的是具体类型的方法。
+* `inner`：**指向接口自身元信息的指针**（在RO段）
+* `_type`：是**指向接口绑定的具体类型元数据的指针**，`iface`里的`data`指针指向的是该类型的值。
+* `hash`：是**接口绑定的具体类型的哈希值**，这个值是从`_type.hash`字段拷贝出来，这里冗余主要是为了**方便接口断言和接口查询时快速访问**。
+* `fun`：是一个函数指针数组，可以理解为C++对象模型里面的虚拟函数指针。注意这个指针数组的大小是可变的，由编译器负责填充，运行时使用底层指针进行访问（不受数组越界的约束），**数组里的指针指向的是具体类型的方法**。
+
+`itab`这个数据结构是非空接口实现动态调用的基础，`itab`里的信息被编译器和链接器保存在可执行文件的RO段中。`itab`存放在静态分配的存储空间中，不受到GC的限制，其内存也不会被回收。
+
+由于Go语言是一种强类型语言，编译器在编译时会做严格的类型校验。所以Go需要为每种类型维护相关的元信息（在运行时和反射都会用到）。而**Go语言的类型元信息的通用结构就是`_type`，其他类型都是以`_type`为内嵌字段封装而成的结构体**。
+
+```go
+//
+// src/runtime/type.go
+//
+
+// Needs to be in sync with ../cmd/link/internal/ld/decodesym.go:/^func.commonsize,
+// ../cmd/compile/internal/reflectdata/reflect.go:/^func.dcommontype and
+// ../reflect/type.go:/^type.rtype.
+// ../internal/reflectlite/type.go:/^type.rtype.
+type _type struct {
+	size       uintptr // 类型的大小
+	ptrdata    uintptr // size of memory prefix holding all pointers
+	hash       uint32 // 类型的哈希值
+	tflag      tflag // 类型的特征标记
+	align      uint8 // _type作为整体保存时的对齐字节数
+	fieldAlign uint8 // 当前结构字段的对齐字节数
+	kind       uint8 // 基础类型的枚举值，与 reflect.Kind 的值相同，决定了如何解析该类型
+	// function for comparing objects of this type
+	// (ptr to object A, ptr to object B) -> ==?
+	equal func(unsafe.Pointer, unsafe.Pointer) bool
+	// gcdata stores the GC type data for the garbage collector.
+	// If the KindGCProg bit is set in kind, gcdata is a GC program.
+	// Otherwise it is a ptrmask bitmap. See mbitmap.go for details.
+	gcdata    *byte // GC的相关信息
+	str       nameOff // 用来表示该类型的名称字符串在二进制文件中的偏移值。由链接器负责填充
+	ptrToThis typeOff // 用来表示类型元信息的指针在编译后二进制文件中的偏移值。由链接器负责填充
+}
+```
+
+`_type`包含所有类型的共同元数据，编译器和运行时可以根据该元信息解析具体类型（类型名、类型的哈希值等）的基本信息。
+
+在`_type`中的`str nameOff`和`ptrToThis typeOff`最终都是由链接器负责确定和填充的。运行时提供了两个转换查找函数
+
+```go
+//
+// src/runtime/type.go
+//
+
+// 获取 _type 的名字
+func resolveNameOff(ptrInModule unsafe.Pointer, off nameOff) name {}
+
+// 获取 _type 的副本
+func resolveTypeOff(ptrInModule unsafe.Pointer, off typeOff) *_type {}
+```
+
+**Go语言的类型元信息是由编译器负责构建，并以表的形式存放在编译后的对象文件中。链接器在链接时进行段合并、符号重定位（填充某些值）。然后这些类型信息在接口的动态调用和反射中被引用。**
+
+以下为接口类型在`_type`类型之上封装的额外元数据类型
+
+```go
+//
+// src/runtime/type.go
+//
+
+type interfacetype struct {
+	typ     _type // 类型的通用元数据
+	pkgpath name // 包的名称
+	mhdr    []imethod // 接口的方法签名列表
+}
+
+type imethod struct {
+	name nameOff // 方法的名字在二进制文件中的偏移
+	ityp typeOff // 方法类型元数据在二进制文件中的偏移
+}
+```
 
