@@ -244,3 +244,131 @@ var xxx *int = nil
 var b interface{} = xxx // &Interface{Type: *int, Bind: nil}
 ```
 
+这里还有一个特殊的实例
+
+```go
+type Any interface{}
+
+func main() {
+	var a interface{} = nil
+	var b interface{} = a
+
+	fmt.Printf("a == nil => %v\n", a == nil)
+	fmt.Printf("b == nil => %v\n", b == nil)
+
+	var c Any = nil
+	var d interface{} = c
+
+	fmt.Printf("c == nil => %v\n", c == nil)
+	fmt.Printf("d == nil => %v\n", d == nil)
+}
+```
+
+
+
+### 接口内部实现
+
+接口是Go语言类型系统的灵魂，也是Go语言实现多态和反射的基础。
+
+#### 接口的数据结构
+
+接口变量必须初始化才有意义，没有初始化的接口变量的默认值是`nil`。把具体类型的实例传递给接口称为接口的实例化。在接口的实例化过程中，编译器通过特定的数据结构描述整个过程。
+
+```go
+//
+// src/runtime/runtime2.go
+//
+
+type iface struct {
+	tab  *itab
+	data unsafe.Pointer
+}
+
+// layout of Itab known to compilers
+// allocated in non-garbage-collected memory
+// Needs to be in sync with
+// ../cmd/compile/internal/reflectdata/reflect.go:/^func.WriteTabs.
+type itab struct {
+	inter *interfacetype
+	_type *_type
+	hash  uint32 // copy of _type.hash. Used for type switches.
+	_     [4]byte
+	fun   [1]uintptr // variable sized. fun[0]==0 means _type does not implement inter.
+}
+
+
+//
+// src/runtime/type.go
+//
+
+type interfacetype struct {
+	typ     _type
+	pkgpath name
+	mhdr    []imethod
+}
+
+// Needs to be in sync with ../cmd/link/internal/ld/decodesym.go:/^func.commonsize,
+// ../cmd/compile/internal/reflectdata/reflect.go:/^func.dcommontype and
+// ../reflect/type.go:/^type.rtype.
+// ../internal/reflectlite/type.go:/^type.rtype.
+type _type struct {
+	size       uintptr
+	ptrdata    uintptr // size of memory prefix holding all pointers
+	hash       uint32
+	tflag      tflag
+	align      uint8
+	fieldAlign uint8
+	kind       uint8
+	// function for comparing objects of this type
+	// (ptr to object A, ptr to object B) -> ==?
+	equal func(unsafe.Pointer, unsafe.Pointer) bool
+	// gcdata stores the GC type data for the garbage collector.
+	// If the KindGCProg bit is set in kind, gcdata is a GC program.
+	// Otherwise it is a ptrmask bitmap. See mbitmap.go for details.
+	gcdata    *byte
+	str       nameOff
+	ptrToThis typeOff
+}
+
+type nameOff int32
+type typeOff int32
+```
+
+非空接口的底层数据结构是`iface`，代码位于`src/runtime/runtime2.go`
+
+```go
+type iface struct {
+	tab  *itab // 存放类型及方法指针信息
+	data unsafe.Pointer // 实例的副本
+}
+```
+
+非空接口初始化的过程就是初始化一个iface类型的结构。`iface`结构中只包含两个指针类型字段
+
+* `itab`：用来存放接口**自身类型**（1）和**绑定的实例类型**（2）以及**实例相关的函数指针**（3）
+* `data`：**指向接口绑定的实例的副本**，接口的初始化也是一种值拷贝（如果实例是一个指针类型，那么`data`就是指向“指针实例副本”的指针）。
+
+在`itab`中是接口内部实现的核心和基础
+
+```go
+// layout of Itab known to compilers
+// allocated in non-garbage-collected memory
+// Needs to be in sync with
+// ../cmd/compile/internal/reflectdata/reflect.go:/^func.WriteTabs.
+type itab struct {
+	inter *interfacetype // 接口自身的静态类型
+	_type *_type // 接口绑定的具体实例的类型（动态类型）
+    // 存放具体类型的哈希值
+	hash  uint32 // copy of _type.hash. Used for type switches.
+	_     [4]byte
+	fun   [1]uintptr // variable sized. fun[0]==0 means _type does not implement inter.
+}
+```
+
+在`itab`中有5个字段：
+
+* `inner`：指向接口自身元信息的指针（在RO段）
+* `_type`：是指向接口绑定的具体类型元数据的指针，`iface`里的`data`指针指向的是该类型的值。
+* `hash`：是接口绑定的具体类型的哈希值，这个值是从`_type.hash`字段拷贝出来，这里冗余主要是为了方便接口断言和接口查询时快速访问。
+* `fun`：是一个函数指针，可以理解为C++对象模型里面的虚拟函数指针。注意这个指针数组的大小是可变的，由编译器负责填充，运行时使用底层指针进行访问（不受数组越界的约束），数组里的指针指向的是具体类型的方法。
+
