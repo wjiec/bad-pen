@@ -455,3 +455,104 @@ type imethod struct {
 }
 ```
 
+#### 接口调用过程分析
+
+我们首先准备以下代码并将其反编译来分析接口实例化和动态调用过程
+
+```go
+package main
+
+type Calculator interface {
+	Add(a, b int) int
+	Sub(a, b int) int
+}
+
+type Simpler struct {
+	ID int64
+}
+
+//go:noinline
+func (s Simpler) Add(a, b int) int {
+	return a + b
+}
+
+//go:noinline
+func (s Simpler) Sub(a, b int) int {
+	return a - b
+}
+
+func main() {
+	var c Calculator = Simpler{ID: 1234}
+	c.Add(77, 88)
+}
+
+// go tool compile -N -l -S main.go > main.S
+```
+
+接下来我们首先看 main 函数的汇编代码
+
+```asm
+//
+// func main()
+//
+"".main STEXT size=208 args=0x0 locals=0x48 funcid=0x0
+	0x0000 00000 (main.go:22)	TEXT	"".main(SB), ABIInternal, $72-0
+
+	// 检查是否需要栈扩展
+	0x0000 00000 (main.go:22)	MOVQ	(TLS), CX
+	0x0009 00009 (main.go:22)	CMPQ	SP, 16(CX)
+	0x000d 00013 (main.go:22)	JLS	198
+
+	// 为 main 函数准备栈空间
+	0x0013 00019 (main.go:22)	SUBQ	$72, SP
+	0x0017 00023 (main.go:22)	MOVQ	BP, 64(SP)
+	0x001c 00028 (main.go:22)	LEAQ	64(SP), BP
+	
+	// 初始化 Simpler 对象，默认初始化为空值 0
+	0x0021 00033 (main.go:23)	MOVQ	$0, ""..autotmp_1+40(SP)
+	// 然后初始化为特定值 1234
+	// 这里有2次的原因是我们首先创建 Simpler 实例 s
+	// 然后将实例 s 赋值给接口变量 c
+	0x002a 00042 (main.go:23)	MOVQ	$1234, ""..autotmp_1+40(SP)
+	0x0033 00051 (main.go:23)	MOVQ	$1234, ""..autotmp_2+32(SP)
+
+	// 获取 go.itab."".Simpler,"".Calculator 的地址并赋值给 AX
+	0x003c 00060 (main.go:23)	LEAQ	go.itab."".Simpler,"".Calculator(SB), AX
+	0x0043 00067 (main.go:23)	MOVQ	AX, "".c+48(SP)
+	0x0048 00072 (main.go:23)	LEAQ	""..autotmp_2+32(SP), AX
+	0x004d 00077 (main.go:23)	MOVQ	AX, "".c+56(SP)
+	0x0052 00082 (main.go:24)	MOVQ	$0, ""..autotmp_1+40(SP)
+	0x005b 00091 (main.go:24)	MOVQ	"".c+48(SP), AX
+	0x0060 00096 (main.go:24)	MOVQ	"".c+56(SP), CX
+	0x0065 00101 (main.go:24)	LEAQ	go.itab."".Simpler,"".Calculator(SB), DX
+	0x006c 00108 (main.go:24)	CMPQ	DX, AX
+	0x006f 00111 (main.go:24)	JEQ	115
+	0x0071 00113 (main.go:24)	JMP	161
+	0x0073 00115 (main.go:24)	MOVQ	(CX), AX
+	0x0076 00118 (main.go:24)	MOVQ	AX, ""..autotmp_1+40(SP)
+	0x007b 00123 (main.go:24)	MOVQ	AX, (SP)
+	0x007f 00127 (main.go:24)	MOVQ	$77, 8(SP)
+	0x0088 00136 (main.go:24)	MOVQ	$88, 16(SP)
+	0x0091 00145 (main.go:24)	PCDATA	$1, $0
+	0x0091 00145 (main.go:24)	CALL	"".Simpler.Add(SB)
+	0x0096 00150 (main.go:25)	MOVQ	64(SP), BP
+	0x009b 00155 (main.go:25)	ADDQ	$72, SP
+	0x009f 00159 (main.go:25)	NOP
+	0x00a0 00160 (main.go:25)	RET
+	0x00a1 00161 (main.go:24)	MOVQ	AX, (SP)
+	0x00a5 00165 (main.go:24)	LEAQ	type."".Simpler(SB), AX
+	0x00ac 00172 (main.go:24)	MOVQ	AX, 8(SP)
+	0x00b1 00177 (main.go:24)	LEAQ	type."".Calculator(SB), AX
+	0x00b8 00184 (main.go:24)	MOVQ	AX, 16(SP)
+	0x00bd 00189 (main.go:24)	NOP
+	0x00c0 00192 (main.go:24)	CALL	runtime.panicdottypeI(SB)
+	0x00c5 00197 (main.go:24)	XCHGL	AX, AX
+	0x00c6 00198 (main.go:24)	NOP
+	0x00c6 00198 (main.go:22)	PCDATA	$1, $-1
+	0x00c6 00198 (main.go:22)	PCDATA	$0, $-2
+	0x00c6 00198 (main.go:22)	CALL	runtime.morestack_noctxt(SB)
+	0x00cb 00203 (main.go:22)	PCDATA	$0, $-1
+	0x00cb 00203 (main.go:22)	JMP	0
+	
+```
+
