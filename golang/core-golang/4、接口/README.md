@@ -348,7 +348,7 @@ type typeOff int32
 
 type iface struct {
 	tab  *itab // 存放类型及方法指针信息
-	data unsafe.Pointer // 实例的副本
+	data unsafe.Pointer // 实例的副本的指针
 }
 ```
 
@@ -492,67 +492,85 @@ func main() {
 接下来我们首先看 main 函数的汇编代码
 
 ```asm
-//
 // func main()
-//
-"".main STEXT size=208 args=0x0 locals=0x48 funcid=0x0
-	0x0000 00000 (main.go:22)	TEXT	"".main(SB), ABIInternal, $72-0
+"".main STEXT size=253 args=0x0 locals=0x60 funcid=0x0
+    0x0000 00000 (main.go:23)    TEXT    "".main(SB), ABIInternal, $96-0
+    // 检查是否需要进行栈扩展
+    0x0000 00000 (main.go:23)    MOVQ    (TLS), CX
+    0x0009 00009 (main.go:23)    CMPQ    SP, 16(CX)
+    0x000d 00013 (main.go:23)    JLS    243
 
-	// 检查是否需要栈扩展
-	0x0000 00000 (main.go:22)	MOVQ	(TLS), CX
-	0x0009 00009 (main.go:22)	CMPQ	SP, 16(CX)
-	0x000d 00013 (main.go:22)	JLS	198
+    // 为 main 函数准备栈空间
+    0x0013 00019 (main.go:23)    SUBQ    $96, SP
+    0x0017 00023 (main.go:23)    MOVQ    BP, 88(SP)
+    0x001c 00028 (main.go:23)    LEAQ    88(SP), BP
 
-	// 为 main 函数准备栈空间
-	0x0013 00019 (main.go:22)	SUBQ	$72, SP
-	0x0017 00023 (main.go:22)	MOVQ	BP, 64(SP)
-	0x001c 00028 (main.go:22)	LEAQ	64(SP), BP
-	
-	// 初始化 Simpler 对象，默认初始化为空值 0
-	0x0021 00033 (main.go:23)	MOVQ	$0, ""..autotmp_1+40(SP)
-	// 然后初始化为特定值 1234
-	// 这里有2次的原因是我们首先创建 Simpler 实例 s
-	// 然后将实例 s 赋值给接口变量 c
-	0x002a 00042 (main.go:23)	MOVQ	$1234, ""..autotmp_1+40(SP)
-	0x0033 00051 (main.go:23)	MOVQ	$1234, ""..autotmp_2+32(SP)
+    // 创建对象 Simpler{A: 1234, B: 5678}
+    0x0021 00033 (main.go:24)    MOVQ    $0, ""..autotmp_1+56(SP)    // 给 A 字段赋零值
+    0x002a 00042 (main.go:24)    MOVL    $0, ""..autotmp_1+64(SP)    // 给 B 字段赋零值
+    0x0032 00050 (main.go:24)    MOVQ    $1234, ""..autotmp_1+56(SP) // 初始化字段 A 的值为 1234
+    0x003b 00059 (main.go:24)    MOVL    $5678, ""..autotmp_1+64(SP) // 初始化字段 B 的值为 5678
 
-	// 获取 go.itab."".Simpler,"".Calculator 的地址并赋值给 AX
-	0x003c 00060 (main.go:23)	LEAQ	go.itab."".Simpler,"".Calculator(SB), AX
-	0x0043 00067 (main.go:23)	MOVQ	AX, "".c+48(SP)
-	0x0048 00072 (main.go:23)	LEAQ	""..autotmp_2+32(SP), AX
-	0x004d 00077 (main.go:23)	MOVQ	AX, "".c+56(SP)
-	0x0052 00082 (main.go:24)	MOVQ	$0, ""..autotmp_1+40(SP)
-	0x005b 00091 (main.go:24)	MOVQ	"".c+48(SP), AX
-	0x0060 00096 (main.go:24)	MOVQ	"".c+56(SP), CX
-	0x0065 00101 (main.go:24)	LEAQ	go.itab."".Simpler,"".Calculator(SB), DX
-	0x006c 00108 (main.go:24)	CMPQ	DX, AX
-	0x006f 00111 (main.go:24)	JEQ	115
-	0x0071 00113 (main.go:24)	JMP	161
-	0x0073 00115 (main.go:24)	MOVQ	(CX), AX
-	0x0076 00118 (main.go:24)	MOVQ	AX, ""..autotmp_1+40(SP)
-	0x007b 00123 (main.go:24)	MOVQ	AX, (SP)
-	0x007f 00127 (main.go:24)	MOVQ	$77, 8(SP)
-	0x0088 00136 (main.go:24)	MOVQ	$88, 16(SP)
-	0x0091 00145 (main.go:24)	PCDATA	$1, $0
-	0x0091 00145 (main.go:24)	CALL	"".Simpler.Add(SB)
-	0x0096 00150 (main.go:25)	MOVQ	64(SP), BP
-	0x009b 00155 (main.go:25)	ADDQ	$72, SP
-	0x009f 00159 (main.go:25)	NOP
-	0x00a0 00160 (main.go:25)	RET
-	0x00a1 00161 (main.go:24)	MOVQ	AX, (SP)
-	0x00a5 00165 (main.go:24)	LEAQ	type."".Simpler(SB), AX
-	0x00ac 00172 (main.go:24)	MOVQ	AX, 8(SP)
-	0x00b1 00177 (main.go:24)	LEAQ	type."".Calculator(SB), AX
-	0x00b8 00184 (main.go:24)	MOVQ	AX, 16(SP)
-	0x00bd 00189 (main.go:24)	NOP
-	0x00c0 00192 (main.go:24)	CALL	runtime.panicdottypeI(SB)
-	0x00c5 00197 (main.go:24)	XCHGL	AX, AX
-	0x00c6 00198 (main.go:24)	NOP
-	0x00c6 00198 (main.go:22)	PCDATA	$1, $-1
-	0x00c6 00198 (main.go:22)	PCDATA	$0, $-2
-	0x00c6 00198 (main.go:22)	CALL	runtime.morestack_noctxt(SB)
-	0x00cb 00203 (main.go:22)	PCDATA	$0, $-1
-	0x00cb 00203 (main.go:22)	JMP	0
-	
+    //
+    // src/runtime/runtime2.go
+    //
+    // type iface struct {
+    //     tab  *itab // 存放类型及方法指针信息
+    //     data unsafe.Pointer // 实例的副本的指针
+    // }
+    //
+
+    // 因为 Simpler 的接收者为 <值类型> 所以这里会拷贝一份 Simpler
+    0x0043 00067 (main.go:24)    MOVQ    ""..autotmp_1+56(SP), AX    // 获取 A 字段的值并赋值给 AX = 1234
+    0x0048 00072 (main.go:24)    MOVQ    AX, ""..autotmp_2+40(SP)    // 初始化字段 c.A 的值为 AX = 1234
+    0x004d 00077 (main.go:24)    MOVL    $5678, ""..autotmp_2+48(SP) // 初始化字段 c.B 的值为 5678
+
+    // 初始化接口变量 var c Calculator = ...
+    //
+    // itab: 存放接口 自身类型 和 绑定的实例类型 以及 实例相关的函数指针
+    0x0055 00085 (main.go:24)    LEAQ    go.itab."".Simpler,"".Calculator(SB), AX   // 获取 Simpler 类型对应 Calculator 接口的 itab 地址
+    0x005c 00092 (main.go:24)    MOVQ    AX, "".c+72(SP)                            // 为 c.tab 字段赋值
+    0x0061 00097 (main.go:24)    LEAQ    ""..autotmp_2+40(SP), AX                   // 获取拷贝的 Simpler 对象的地址
+    0x0066 00102 (main.go:24)    MOVQ    AX, "".c+80(SP)                            // 为 c.data 赋值, 注意这里是指针, 所以取的是地址赋值
+
+    // 销毁首次创建的 Simpler 对象
+    0x006b 00107 (main.go:25)    MOVQ    $0, ""..autotmp_1+56(SP)
+    0x0074 00116 (main.go:25)    MOVL    $0, ""..autotmp_1+64(SP)
+
+    // 这里不知道为啥要检查一下接口变量 c 中的 itab 位置是否相同?
+    0x007c 00124 (main.go:25)    MOVQ    "".c+72(SP), AX
+    0x0081 00129 (main.go:25)    MOVQ    "".c+80(SP), CX
+    0x0086 00134 (main.go:25)    LEAQ    go.itab."".Simpler,"".Calculator(SB), DX
+    0x008d 00141 (main.go:25)    CMPQ    DX, AX
+    0x0090 00144 (main.go:25)    JEQ    148         // 如果 AX == DX, 则继续执行
+    0x0092 00146 (main.go:25)    JMP    209         // 否则抛出异常
+
+    0x0094 00148 (main.go:25)    MOVL    8(CX), AX
+    0x0097 00151 (main.go:25)    MOVQ    (CX), CX
+    0x009a 00154 (main.go:25)    MOVQ    CX, ""..autotmp_1+56(SP)
+    0x009f 00159 (main.go:25)    MOVL    AX, ""..autotmp_1+64(SP)
+    0x00a3 00163 (main.go:25)    MOVQ    ""..autotmp_1+56(SP), CX
+    0x00a8 00168 (main.go:25)    MOVQ    CX, (SP)
+    0x00ac 00172 (main.go:25)    MOVL    AX, 8(SP)
+    0x00b0 00176 (main.go:25)    MOVQ    $77, 16(SP)
+    0x00b9 00185 (main.go:25)    MOVQ    $88, 24(SP)
+    0x00c2 00194 (main.go:25)    CALL    "".Simpler.Add(SB)
+    0x00c7 00199 (main.go:26)    MOVQ    88(SP), BP
+    0x00cc 00204 (main.go:26)    ADDQ    $96, SP
+    0x00d0 00208 (main.go:26)    RET
+
+    // 接口变量 c.tab 的指针与 实际的类型指针位置不相同触发 panic
+    0x00d1 00209 (main.go:25)    MOVQ    AX, (SP)                   // 第一个参数对应 c.tab
+    0x00d5 00213 (main.go:25)    LEAQ    type."".Simpler(SB), AX
+    0x00dc 00220 (main.go:25)    MOVQ    AX, 8(SP)                  // 第二个参数对应 Simpler._type
+    0x00e1 00225 (main.go:25)    LEAQ    type."".Calculator(SB), AX
+    0x00e8 00232 (main.go:25)    MOVQ    AX, 16(SP)                 // 第三个参数对应 Calculator._type
+    0x00ed 00237 (main.go:25)    CALL    runtime.panicdottypeI(SB)  // func panicdottypeI(have, want, iface *byte)
+    0x00f2 00242 (main.go:25)    XCHGL    AX, AX
+    0x00f3 00243 (main.go:25)    NOP
+
+    // 执行栈扩展方法, 扩展完成后返回函数入口再次检查
+    0x00f3 00243 (main.go:23)    CALL    runtime.morestack_noctxt(SB)
+    0x00f8 00248 (main.go:23)    JMP    0
 ```
 
