@@ -508,53 +508,54 @@ func main() {
     // 创建对象 Simpler{A: 1234, B: 5678}
     0x0021 00033 (main.go:24)    MOVQ    $0, ""..autotmp_1+56(SP)    // 给 A 字段赋零值
     0x002a 00042 (main.go:24)    MOVL    $0, ""..autotmp_1+64(SP)    // 给 B 字段赋零值
-    0x0032 00050 (main.go:24)    MOVQ    $1234, ""..autotmp_1+56(SP) // 初始化字段 A 的值为 1234
-    0x003b 00059 (main.go:24)    MOVL    $5678, ""..autotmp_1+64(SP) // 初始化字段 B 的值为 5678
+    0x0032 00050 (main.go:24)    MOVQ    $1234, ""..autotmp_1+56(SP) // 初始化字段 A 的值为 1234(int64)
+    0x003b 00059 (main.go:24)    MOVL    $5678, ""..autotmp_1+64(SP) // 初始化字段 B 的值为 5678(int32)
+
+    // 因为 Simpler 的接收者为 <值类型> 所以这里会拷贝一份 Simpler
+    0x0043 00067 (main.go:24)    MOVQ    ""..autotmp_1+56(SP), AX    // 获取 A 字段的值并赋值给 AX = 1234(int64)
+    0x0048 00072 (main.go:24)    MOVQ    AX, ""..autotmp_2+40(SP)    // 初始化字段 c.A 的值为 AX = 1234(int64)
+    0x004d 00077 (main.go:24)    MOVL    $5678, ""..autotmp_2+48(SP) // 初始化字段 c.B 的值为 5678(int32)
 
     //
     // src/runtime/runtime2.go
     //
     // type iface struct {
     //     tab  *itab // 存放类型及方法指针信息
-    //     data unsafe.Pointer // 实例的副本的指针
+    //     data unsafe.Pointer // 实例的副本
     // }
     //
-
-    // 因为 Simpler 的接收者为 <值类型> 所以这里会拷贝一份 Simpler
-    0x0043 00067 (main.go:24)    MOVQ    ""..autotmp_1+56(SP), AX    // 获取 A 字段的值并赋值给 AX = 1234
-    0x0048 00072 (main.go:24)    MOVQ    AX, ""..autotmp_2+40(SP)    // 初始化字段 c.A 的值为 AX = 1234
-    0x004d 00077 (main.go:24)    MOVL    $5678, ""..autotmp_2+48(SP) // 初始化字段 c.B 的值为 5678
-
-    // 初始化接口变量 var c Calculator = ...
-    //
     // itab: 存放接口 自身类型 和 绑定的实例类型 以及 实例相关的函数指针
+    //
+    // 初始化接口变量 var c Calculator = ...
     0x0055 00085 (main.go:24)    LEAQ    go.itab."".Simpler,"".Calculator(SB), AX   // 获取 Simpler 类型对应 Calculator 接口的 itab 地址
     0x005c 00092 (main.go:24)    MOVQ    AX, "".c+72(SP)                            // 为 c.tab 字段赋值
     0x0061 00097 (main.go:24)    LEAQ    ""..autotmp_2+40(SP), AX                   // 获取拷贝的 Simpler 对象的地址
     0x0066 00102 (main.go:24)    MOVQ    AX, "".c+80(SP)                            // 为 c.data 赋值, 注意这里是指针, 所以取的是地址赋值
 
-    // 销毁首次创建的 Simpler 对象
+    // 清理首次创建的 Simpler 对象, 因为在栈上, 所以直接赋零值就行
     0x006b 00107 (main.go:25)    MOVQ    $0, ""..autotmp_1+56(SP)
     0x0074 00116 (main.go:25)    MOVL    $0, ""..autotmp_1+64(SP)
 
-    // 这里不知道为啥要检查一下接口变量 c 中的 itab 位置是否相同?
-    0x007c 00124 (main.go:25)    MOVQ    "".c+72(SP), AX
-    0x0081 00129 (main.go:25)    MOVQ    "".c+80(SP), CX
+    // 这里不知道为啥要检查一下接口变量 c 中的 itab 指针是否相同?
+    0x007c 00124 (main.go:25)    MOVQ    "".c+72(SP), AX        // AX = c.tab
+    0x0081 00129 (main.go:25)    MOVQ    "".c+80(SP), CX        // CX = c.data
     0x0086 00134 (main.go:25)    LEAQ    go.itab."".Simpler,"".Calculator(SB), DX
     0x008d 00141 (main.go:25)    CMPQ    DX, AX
     0x0090 00144 (main.go:25)    JEQ    148         // 如果 AX == DX, 则继续执行
     0x0092 00146 (main.go:25)    JMP    209         // 否则抛出异常
 
-    0x0094 00148 (main.go:25)    MOVL    8(CX), AX
-    0x0097 00151 (main.go:25)    MOVQ    (CX), CX
-    0x009a 00154 (main.go:25)    MOVQ    CX, ""..autotmp_1+56(SP)
-    0x009f 00159 (main.go:25)    MOVL    AX, ""..autotmp_1+64(SP)
-    0x00a3 00163 (main.go:25)    MOVQ    ""..autotmp_1+56(SP), CX
-    0x00a8 00168 (main.go:25)    MOVQ    CX, (SP)
-    0x00ac 00172 (main.go:25)    MOVL    AX, 8(SP)
-    0x00b0 00176 (main.go:25)    MOVQ    $77, 16(SP)
-    0x00b9 00185 (main.go:25)    MOVQ    $88, 24(SP)
-    0x00c2 00194 (main.go:25)    CALL    "".Simpler.Add(SB)
+    0x0094 00148 (main.go:25)    MOVL    8(CX), AX          // AX = c.data.(*Simpler).B (int32)
+    0x0097 00151 (main.go:25)    MOVQ    (CX), CX           // CX = c.data.(*Simpler).A (int64)
+    0x009a 00154 (main.go:25)    MOVQ    CX, ""..autotmp_1+56(SP)   // 复用初次创建的 Simpler 对象, simpler.A = CX
+    0x009f 00159 (main.go:25)    MOVL    AX, ""..autotmp_1+64(SP)   // 复用初次创建的 Simpler 对象, simpler.B = AX
+    0x00a3 00163 (main.go:25)    MOVQ    ""..autotmp_1+56(SP), CX   // 重新获取 simpler.A 的值并赋值给 CX
+    0x00a8 00168 (main.go:25)    MOVQ    CX, (SP)           // Simpler.Add 的接收者对应的 s.A 字段
+    0x00ac 00172 (main.go:25)    MOVL    AX, 8(SP)          // Simpler.Add 的接收者对应的 s.B 字段
+    0x00b0 00176 (main.go:25)    MOVQ    $77, 16(SP)        // Simpler.Add 的第一个参数
+    0x00b9 00185 (main.go:25)    MOVQ    $88, 24(SP)        // Simpler.Add 的第二个参数
+    0x00c2 00194 (main.go:25)    CALL    "".Simpler.Add(SB) // 直接调用 Simpler.Add 方法
+
+    // 回收 main 函数的栈空间并返回
     0x00c7 00199 (main.go:26)    MOVQ    88(SP), BP
     0x00cc 00204 (main.go:26)    ADDQ    $96, SP
     0x00d0 00208 (main.go:26)    RET
@@ -567,10 +568,188 @@ func main() {
     0x00e8 00232 (main.go:25)    MOVQ    AX, 16(SP)                 // 第三个参数对应 Calculator._type
     0x00ed 00237 (main.go:25)    CALL    runtime.panicdottypeI(SB)  // func panicdottypeI(have, want, iface *byte)
     0x00f2 00242 (main.go:25)    XCHGL    AX, AX
-    0x00f3 00243 (main.go:25)    NOP
 
     // 执行栈扩展方法, 扩展完成后返回函数入口再次检查
+    0x00f3 00243 (main.go:25)    NOP
     0x00f3 00243 (main.go:23)    CALL    runtime.morestack_noctxt(SB)
     0x00f8 00248 (main.go:23)    JMP    0
 ```
 
+**注意：以上直接调用了`"".Simpler.Add`方法，应该是新版本的Go编译器为了节省接口调用的开销而做的优化。**接下来我们稍微改下代码：
+
+```go
+package main
+
+type Calculator interface {
+	Add(a, b int) int
+	Sub(a, b int) int
+}
+
+type Simpler struct {
+	A int64
+	B int32
+}
+
+//go:noinline
+func (s Simpler) Add(a, b int) int {
+	return a + b
+}
+
+//go:noinline
+func (s Simpler) Sub(a, b int) int {
+	return a - b
+}
+
+func CallAdd(c Calculator, a, b int) int {
+	return c.Add(a, b)
+}
+
+func main() {
+	var c Calculator = Simpler{A: 1234, B: 5678}
+	CallAdd(c, 77, 88)
+}
+```
+
+接下来我们直接分析 main 方法和 CallAdd 都做了什么
+
+```asm
+// func main()
+"".main STEXT size=175 args=0x0 locals=0x50 funcid=0x0
+	0x0000 00000 (main.go:27)	TEXT	"".main(SB), ABIInternal, $80-0
+
+    // 检查是否需要栈扩展
+	0x0000 00000 (main.go:27)	MOVQ	(TLS), CX
+	0x0009 00009 (main.go:27)	CMPQ	SP, 16(CX)
+	0x000d 00013 (main.go:27)	JLS	165
+
+    // 准备 main 函数的栈空间
+	0x0013 00019 (main.go:27)	SUBQ	$80, SP
+	0x0017 00023 (main.go:27)	MOVQ	BP, 72(SP)
+	0x001c 00028 (main.go:27)	LEAQ	72(SP), BP
+
+    // 初始化 Simpler 对象
+	0x0021 00033 (main.go:28)	MOVQ	$0, ""..autotmp_1+40(SP)
+	0x002a 00042 (main.go:28)	MOVL	$0, ""..autotmp_1+48(SP)
+	0x0032 00050 (main.go:28)	MOVQ	$1234, ""..autotmp_1+40(SP)
+	0x003b 00059 (main.go:28)	MOVL	$5678, ""..autotmp_1+48(SP)
+
+    // 通过调用 runtime.convT2Inoptr 的方式创建一个接口变量
+	0x0043 00067 (main.go:28)	LEAQ	go.itab."".Simpler,"".Calculator(SB), AX
+	0x004a 00074 (main.go:28)	MOVQ	AX, (SP)                    // 第一个参数为接口对应实现的 itab 偏移
+	0x004e 00078 (main.go:28)	LEAQ	""..autotmp_1+40(SP), AX
+	0x0053 00083 (main.go:28)	MOVQ	AX, 8(SP)                   // 第二个参数为绑定对象的指针(地址)
+	// runtime/iface.go
+	//
+	// func convT2Inoptr(tab *itab, elem unsafe.Pointer) (i iface)
+	0x0058 00088 (main.go:28)	CALL	runtime.convT2Inoptr(SB)
+
+	// 从返回值中初始化接口变量 c
+	0x005d 00093 (main.go:28)	MOVQ	16(SP), AX      // 返回值的 iface.tab 字段
+	0x0062 00098 (main.go:28)	MOVQ	24(SP), CX      // 返回值的 iface.data 字段
+	0x0067 00103 (main.go:28)	MOVQ	AX, "".c+56(SP) // 使用返回值初始化 c.tab 字段
+	0x006c 00108 (main.go:28)	MOVQ	CX, "".c+64(SP) // 使用返回值初始化 c.data 字段
+
+	// 准备调用 CallAdd 的参数
+	0x0071 00113 (main.go:29)	MOVQ	"".c+56(SP), AX // 准备参数 c 的 tab 字段
+	0x0076 00118 (main.go:29)	MOVQ	"".c+64(SP), CX // 准备参数 c 的 data 字段
+	0x007b 00123 (main.go:29)	MOVQ	AX, (SP)    // 初始化参数 c 的 tab 字段
+	0x007f 00127 (main.go:29)	MOVQ	CX, 8(SP)   // 初始化参数 c 的 data 字段
+	0x0084 00132 (main.go:29)	MOVQ	$77, 16(SP) // CallAdd 的第二个参数
+	0x008d 00141 (main.go:29)	MOVQ	$88, 24(SP) // CallAdd 的第三个参数
+	0x0096 00150 (main.go:29)	CALL	"".CallAdd(SB)
+
+    // 回收 main 函数的栈空间
+	0x009b 00155 (main.go:30)	MOVQ	72(SP), BP
+	0x00a0 00160 (main.go:30)	ADDQ	$80, SP
+	0x00a4 00164 (main.go:30)	RET
+
+    // 执行栈扩展方法, 扩展完成后返回函数入口再次检查
+	0x00a5 00165 (main.go:30)	NOP
+	0x00a5 00165 (main.go:27)	CALL	runtime.morestack_noctxt(SB)
+	0x00aa 00170 (main.go:27)	JMP	0
+```
+
+关于以上内容我们需要关注几个点：
+
+1、`LEAQ`指令用于获取一个符号或者内存的地址，`go.itab."".Simpler,"".Calculator(SB)`这个符号表示的 `Simpler` 类型在 `Calculator` 接口上对应的 `itab` 数据结构相对基址。
+
+2、由于我们将会在其他函数中使用对象 `Simpler`，所以这个对象会逃逸到堆上。方法 `runtime.convT2Inoptr` 的作用就是在堆上创建相对应的 `iface` 数据结构，而 `iface` 数据结构就是实现接口动态调用的关键。`convT2Inoptr` 方法的正确断句是 `conv/T2I/noptr`，其表达的意思将类型转换为接口且其中不含指针。与之相对应的还有 `runtime.convT2I` 方法。对象是否逃逸我们可以使用 `tool compile -m -l main.go` 来进行检查（`-m` 参数可以使用多次）
+
+```bash
+$ go tool compile -m -l main.go
+main.go:23:14: leaking param: c
+main.go:28:6: Simpler{...} escapes to heap		// 从这里可以发现 Simpler 对象逃逸到堆上了
+...
+```
+
+接下来来看看 `CallAdd` 方法是如何在 `iface` 基础上实现动态调用的
+
+```asm
+// func CallAdd(c Calculator, a, b int) int
+"".CallAdd STEXT size=112 args=0x28 locals=0x30 funcid=0x0
+	0x0000 00000 (main.go:23)	TEXT	"".CallAdd(SB), ABIInternal, $48-40
+	// 栈扩展
+	0x0000 00000 (main.go:23)	MOVQ	(TLS), CX
+	0x0009 00009 (main.go:23)	CMPQ	SP, 16(CX)
+	0x000d 00013 (main.go:23)	JLS	105
+
+	// 开辟栈空间
+	0x000f 00015 (main.go:23)	SUBQ	$48, SP
+	0x0013 00019 (main.go:23)	MOVQ	BP, 40(SP)
+	0x0018 00024 (main.go:23)	LEAQ	40(SP), BP
+
+	// 给返回值赋零值初始化
+	0x001d 00029 (main.go:23)	MOVQ	$0, "".~r3+88(SP)
+
+	// 实现动态调用
+	0x0026 00038 (main.go:24)	MOVQ	"".c+56(SP), AX     // 获取接口变量 c.tab 指针的值
+	0x002b 00043 (main.go:24)	TESTB	AL, (AX)            // 检查 itab.interfacetype 指针是否为空
+	0x002d 00045 (main.go:24)	MOVQ	"".a+72(SP), CX     // 获取参数 a 的值
+	0x0032 00050 (main.go:24)	MOVQ	"".b+80(SP), DX     // 获取参数 b 的值
+	0x0037 00055 (main.go:24)	MOVQ	24(AX), AX          // 获取 itab.fun 函数指针的值
+	//
+	// type itab struct {
+    //     inter *interfacetype     // offset=0, size = 8
+    //     _type *_type             // offset=8, size = 8
+    //     hash  uint32             // offset=16, size = 4
+    //     _     [4]byte            // offset=20, size = 4
+    //     fun   [1]uintptr         // offset=24, size = variable
+    // }
+	//
+	0x003b 00059 (main.go:24)	MOVQ	"".c+64(SP), BX     // 获取接口变量 c.data 的值
+	0x0040 00064 (main.go:24)	MOVQ	BX, (SP)            // 第一个参数 c.data
+	0x0044 00068 (main.go:24)	MOVQ	CX, 8(SP)           // 第二个参数 a
+	0x0049 00073 (main.go:24)	MOVQ	DX, 16(SP)          // 第三个参数 b
+	0x004e 00078 (main.go:24)	CALL	AX                  // itab.fun(c.data, a, b)
+	0x0050 00080 (main.go:24)	MOVQ	24(SP), AX          // 获取函数的返回值
+	0x0055 00085 (main.go:24)	MOVQ	AX, ""..autotmp_4+32(SP)    // 将返回值赋给一个临时变量
+	0x005a 00090 (main.go:24)	MOVQ	AX, "".~r3+88(SP)           // 为 CallAdd 的返回值赋值
+
+	// 回收栈空间并返回
+	0x005f 00095 (main.go:24)	MOVQ	40(SP), BP
+	0x0064 00100 (main.go:24)	ADDQ	$48, SP
+	0x0068 00104 (main.go:24)	RET
+
+	// 回收栈空间
+	0x0069 00105 (main.go:24)	NOP
+	0x0069 00105 (main.go:23)	CALL	runtime.morestack_noctxt(SB)
+	0x006e 00110 (main.go:23)	JMP	0
+```
+
+同样，我们来看以上需要关注的几个点
+
+1、接口的动态调用依靠的是 `itab` 结构中的 `fun` 字段中所保存的函数指针实现。
+
+2、所有的动态调用过程中编译器都将接收者为值类型的方法转换为指针接收者，这种行为了是为了方便调用和优化。所以 `itab.func` 的第一个参数（接收者）的值为 `c.data` 指针（接口绑定类型实例的指针）
+
+#### 总结
+
+接口的动态调用依赖于 `iface.tab` 中的 `fun` 字段所保存的函数指针实现。接口的动态调用分为两个步骤
+
+1、构建 `iface` 数据结构，一般在接口变量初始化时完成
+
+2、**如果上下文可以直接推断类型，则直接调用具体类型的方法实现。否则通过接口变量中的函数指针调用接口绑定实例的方法**。
+
+
+
+### 接口调用代价
