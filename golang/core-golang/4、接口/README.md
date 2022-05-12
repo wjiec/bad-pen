@@ -753,3 +753,225 @@ main.go:28:6: Simpler{...} escapes to heap		// 从这里可以发现 Simpler 对
 
 
 ### 接口调用代价
+
+在接口的动态调用过程中存在两不分多余损耗，第一是接口实例化的过程（也就是创建iface数据结构）。另一部分是接口的方法调用，这是一个函数指针的间接调用（动态计算后的跳转调用），这对现代计算机CPU的执行不是非常友好（会导致CPU缓存失效和分支预测失败，这也会导致一部分的性能损失）。
+
+我们可以通过如下代码来对比测试，看看接口动态调用的性能损失到底有多大：
+
+```go
+//
+// wear_test.go
+//
+//  go test -bench="Bench" -cpu=1 -count=5 wear_test.go
+//
+
+package wear
+
+import (
+	"testing"
+)
+
+type Identifier interface {
+	Inline() int32
+	NoInline() int32
+}
+
+type ID struct {
+	id int32
+}
+
+func (id *ID) Inline() int32 {
+	return id.id
+}
+
+//go:noinline
+func (id *ID) NoInline() int32 {
+	return id.id
+}
+
+//
+// reflect/value.go
+//
+// Dummy annotation marking that the value x escapes,
+// for use in cases where the reflect code is so clever that
+// the compiler cannot follow.
+func escapes(x interface{}) {
+	if dummy.b {
+		dummy.x = x
+	}
+}
+
+var dummy struct {
+	b bool
+	x interface{}
+}
+
+//go:noinline
+func DirectInline(id *ID) int32 {
+	return id.Inline()
+}
+
+//go:noinline
+func DirectNoInline(id *ID) int32 {
+	return id.NoInline()
+}
+
+//go:noinline
+func InterfaceInline(id Identifier) int32 {
+	return id.Inline()
+}
+
+//go:noinline
+func InterfaceNoInline(id Identifier) int32 {
+	return id.NoInline()
+}
+
+func BenchmarkID_Direct(b *testing.B) {
+	var ret int32
+
+	b.Run("noinline", func(b *testing.B) {
+		x := &ID{id: 1234}
+		escapes(x)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			ret = DirectNoInline(x)
+		}
+	})
+	b.Run("inline", func(b *testing.B) {
+		x := &ID{id: 1234}
+		escapes(x)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			ret = DirectInline(x)
+		}
+	})
+
+	_ = ret
+}
+
+func BenchmarkID_Interface(b *testing.B) {
+	var ret int32
+
+	b.Run("noinline", func(b *testing.B) {
+		var x Identifier = &ID{id: 1234}
+		escapes(x)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			ret = InterfaceNoInline(x)
+		}
+	})
+	b.Run("inline", func(b *testing.B) {
+		var x Identifier = &ID{id: 1234}
+		escapes(x)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			ret = InterfaceInline(x)
+		}
+	})
+
+	_ = ret
+}
+```
+
+以下分别是 `go1.16`，`go1.17`，`go1.18` 得到的结果
+
+```text
+//
+// go1.16
+//
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz
+BenchmarkID_Direct/noinline         	279827311	         4.230 ns/op
+BenchmarkID_Direct/noinline         	284898583	         4.198 ns/op
+BenchmarkID_Direct/noinline         	285709496	         4.204 ns/op
+BenchmarkID_Direct/noinline         	285689091	         4.201 ns/op
+BenchmarkID_Direct/noinline         	285710798	         4.202 ns/op
+BenchmarkID_Direct/inline           	502259485	         2.392 ns/op
+BenchmarkID_Direct/inline           	495132288	         2.388 ns/op
+BenchmarkID_Direct/inline           	495564354	         2.390 ns/op
+BenchmarkID_Direct/inline           	502272045	         2.390 ns/op
+BenchmarkID_Direct/inline           	502392055	         2.390 ns/op
+BenchmarkID_Interface/noinline      	266717086	         4.513 ns/op
+BenchmarkID_Interface/noinline      	266016693	         4.504 ns/op
+BenchmarkID_Interface/noinline      	266364024	         4.515 ns/op
+BenchmarkID_Interface/noinline      	263780900	         4.503 ns/op
+BenchmarkID_Interface/noinline      	266884749	         4.501 ns/op
+BenchmarkID_Interface/inline        	265814242	         4.497 ns/op
+BenchmarkID_Interface/inline        	266684151	         4.499 ns/op
+BenchmarkID_Interface/inline        	266325372	         4.539 ns/op
+BenchmarkID_Interface/inline        	266335770	         4.524 ns/op
+BenchmarkID_Interface/inline        	264714562	         4.511 ns/op
+PASS
+
+
+//
+// go1.17
+//
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz
+BenchmarkID_Direct/noinline         	368764939	         3.224 ns/op
+BenchmarkID_Direct/noinline         	378324794	         3.168 ns/op
+BenchmarkID_Direct/noinline         	378442860	         3.165 ns/op
+BenchmarkID_Direct/noinline         	378489505	         3.167 ns/op
+BenchmarkID_Direct/noinline         	378627369	         3.169 ns/op
+BenchmarkID_Direct/inline           	562518901	         2.137 ns/op
+BenchmarkID_Direct/inline           	562454290	         2.139 ns/op
+BenchmarkID_Direct/inline           	564468903	         2.123 ns/op
+BenchmarkID_Direct/inline           	566852649	         2.118 ns/op
+BenchmarkID_Direct/inline           	568746331	         2.117 ns/op
+BenchmarkID_Interface/noinline      	343047410	         3.491 ns/op
+BenchmarkID_Interface/noinline      	342796851	         3.494 ns/op
+BenchmarkID_Interface/noinline      	343993393	         3.508 ns/op
+BenchmarkID_Interface/noinline      	343607748	         3.485 ns/op
+BenchmarkID_Interface/noinline      	344529655	         3.484 ns/op
+BenchmarkID_Interface/inline        	344531984	         3.476 ns/op
+BenchmarkID_Interface/inline        	344546524	         3.479 ns/op
+BenchmarkID_Interface/inline        	345821228	         3.476 ns/op
+BenchmarkID_Interface/inline        	345530970	         3.472 ns/op
+BenchmarkID_Interface/inline        	342848203	         3.485 ns/op
+PASS
+
+
+//
+// go1.18
+//
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz
+BenchmarkID_Direct/noinline         	382653601	         3.130 ns/op
+BenchmarkID_Direct/noinline         	384281214	         3.122 ns/op
+BenchmarkID_Direct/noinline         	384861854	         3.119 ns/op
+BenchmarkID_Direct/noinline         	387765333	         3.110 ns/op
+BenchmarkID_Direct/noinline         	387017601	         3.102 ns/op
+BenchmarkID_Direct/inline           	576926984	         2.084 ns/op
+BenchmarkID_Direct/inline           	576976302	         2.081 ns/op
+BenchmarkID_Direct/inline           	577804605	         2.085 ns/op
+BenchmarkID_Direct/inline           	576790406	         2.077 ns/op
+BenchmarkID_Direct/inline           	577854663	         2.086 ns/op
+BenchmarkID_Interface/noinline      	347317480	         3.482 ns/op
+BenchmarkID_Interface/noinline      	346113297	         3.463 ns/op
+BenchmarkID_Interface/noinline      	345904214	         3.476 ns/op
+BenchmarkID_Interface/noinline      	345881388	         3.474 ns/op
+BenchmarkID_Interface/noinline      	345325503	         3.481 ns/op
+BenchmarkID_Interface/inline        	345897781	         3.480 ns/op
+BenchmarkID_Interface/inline        	344225434	         3.493 ns/op
+BenchmarkID_Interface/inline        	339639932	         3.485 ns/op
+BenchmarkID_Interface/inline        	344404767	         3.488 ns/op
+BenchmarkID_Interface/inline        	344211804	         3.487 ns/op
+PASS
+```
+
+通过对比我们可以发现，通过接口进行动态调用会有大概 2ns 的性能损失，而且还是在这种简单方法上（无形中放大了接口调用的耗时），如果方法中带有复杂的逻辑计算，则真实的**性能损失基本可以忽略不计**。
+
+从不同版本的测试来看，Go1.17之后得益于寄存器的调用约定也进一步减少了接口的动态调用损耗，且官方团队也在不断地进行优化，所以除非是纳秒必争的项目，不然可以忽略接口动态调用带来的性能损耗。
+
+
+
+### 空接口数据结构
+
