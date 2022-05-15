@@ -64,13 +64,13 @@ type EmbeddedInterface interface {
 
 ```go
 type Apple interface {
-	App()
+    App()
 }
 
 type Banana interface {
-	Apple
+    Apple
 
-	Ban()
+    Ban()
 }
 
 type Sample struct{}
@@ -80,17 +80,17 @@ func (Sample) Ban() {}
 
 func main() {
     // 这个例子不好，没想到啥好的解释方法
-	s := Sample{}
-	fmt.Printf("&s = %p\n\n", &s)
+    s := Sample{}
+    fmt.Printf("&s = %p\n\n", &s)
 
-	var b Banana = s
-	fmt.Printf("&s = %p\n", &s)
-	fmt.Printf("&b = %p\n\n", &b)
+    var b Banana = s
+    fmt.Printf("&s = %p\n", &s)
+    fmt.Printf("&b = %p\n\n", &b)
 
-	var a Apple = b
-	fmt.Printf("&s = %p\n", &s)
-	fmt.Printf("&b = %p\n", &b)
-	fmt.Printf("&a = %p\n\n", &a)
+    var a Apple = b
+    fmt.Printf("&s = %p\n", &s)
+    fmt.Printf("&b = %p\n", &b)
+    fmt.Printf("&a = %p\n\n", &a)
 }
 ```
 
@@ -195,38 +195,38 @@ case A, *B, C:
 
 ```go
 type Printer interface {
-	Print()
-	Println()
+    Print()
+    Println()
 }
 
 type Apple struct{}
 
 func (a Apple) Print() {
-	fmt.Println("Apple.Print")
+    fmt.Println("Apple.Print")
 }
 
 func (a *Apple) Println() {
-	fmt.Println("Apple.Println")
+    fmt.Println("Apple.Println")
 }
 
 func main() {
-	var apple *Apple = nil
-	var printer Printer = apple
+    var apple *Apple = nil
+    var printer Printer = apple
 
-	fmt.Printf("apple = %p\n", apple)
-	fmt.Printf("printer %p\n", printer)
+    fmt.Printf("apple = %p\n", apple)
+    fmt.Printf("printer %p\n", printer)
 
-	if printer != nil {
-		printer.Println()
+    if printer != nil {
+        printer.Println()
 
         // panic: runtime error: invalid memory address or nil pointer dereference
-		//printer.Print()
-	}
+        //printer.Print()
+    }
     
     // Output:
-    //	apple = 0x0
-	//	printer 0x0
-	//	Apple.Println
+    //    apple = 0x0
+    //    printer 0x0
+    //    Apple.Println
 }
 ```
 
@@ -250,17 +250,17 @@ var b interface{} = xxx // &Interface{Type: *int, Bind: nil}
 type Any interface{}
 
 func main() {
-	var a interface{} = nil
-	var b interface{} = a
+    var a interface{} = nil
+    var b interface{} = a
 
-	fmt.Printf("a == nil => %v\n", a == nil)
-	fmt.Printf("b == nil => %v\n", b == nil)
+    fmt.Printf("a == nil => %v\n", a == nil)
+    fmt.Printf("b == nil => %v\n", b == nil)
 
-	var c Any = nil
-	var d interface{} = c
+    var c Any = nil
+    var d interface{} = c
 
-	fmt.Printf("c == nil => %v\n", c == nil)
-	fmt.Printf("d == nil => %v\n", d == nil)
+    fmt.Printf("c == nil => %v\n", c == nil)
+    fmt.Printf("d == nil => %v\n", d == nil)
 }
 ```
 
@@ -280,8 +280,8 @@ func main() {
 //
 
 type iface struct {
-	tab  *itab
-	data unsafe.Pointer
+    tab  *itab
+    data unsafe.Pointer
 }
 
 // layout of Itab known to compilers
@@ -289,11 +289,11 @@ type iface struct {
 // Needs to be in sync with
 // ../cmd/compile/internal/reflectdata/reflect.go:/^func.WriteTabs.
 type itab struct {
-	inter *interfacetype
-	_type *_type
-	hash  uint32 // copy of _type.hash. Used for type switches.
-	_     [4]byte
-	fun   [1]uintptr // variable sized. fun[0]==0 means _type does not implement inter.
+    inter *interfacetype
+    _type *_type
+    hash  uint32 // copy of _type.hash. Used for type switches.
+    _     [4]byte
+    fun   [1]uintptr // variable sized. fun[0]==0 means _type does not implement inter.
 }
 
 
@@ -302,14 +302,14 @@ type itab struct {
 //
 
 type interfacetype struct {
-	typ     _type
-	pkgpath name
-	mhdr    []imethod
+    typ     _type
+    pkgpath name
+    mhdr    []imethod
 }
 
 type imethod struct {
-	name nameOff
-	ityp typeOff
+    name nameOff
+    ityp typeOff
 }
 
 // Needs to be in sync with ../cmd/link/internal/ld/decodesym.go:/^func.commonsize,
@@ -317,22 +317,22 @@ type imethod struct {
 // ../reflect/type.go:/^type.rtype.
 // ../internal/reflectlite/type.go:/^type.rtype.
 type _type struct {
-	size       uintptr
-	ptrdata    uintptr // size of memory prefix holding all pointers
-	hash       uint32
-	tflag      tflag
-	align      uint8
-	fieldAlign uint8
-	kind       uint8
-	// function for comparing objects of this type
-	// (ptr to object A, ptr to object B) -> ==?
-	equal func(unsafe.Pointer, unsafe.Pointer) bool
-	// gcdata stores the GC type data for the garbage collector.
-	// If the KindGCProg bit is set in kind, gcdata is a GC program.
-	// Otherwise it is a ptrmask bitmap. See mbitmap.go for details.
-	gcdata    *byte
-	str       nameOff
-	ptrToThis typeOff
+    size       uintptr
+    ptrdata    uintptr // size of memory prefix holding all pointers
+    hash       uint32
+    tflag      tflag
+    align      uint8
+    fieldAlign uint8
+    kind       uint8
+    // function for comparing objects of this type
+    // (ptr to object A, ptr to object B) -> ==?
+    equal func(unsafe.Pointer, unsafe.Pointer) bool
+    // gcdata stores the GC type data for the garbage collector.
+    // If the KindGCProg bit is set in kind, gcdata is a GC program.
+    // Otherwise it is a ptrmask bitmap. See mbitmap.go for details.
+    gcdata    *byte
+    str       nameOff
+    ptrToThis typeOff
 }
 
 type nameOff int32
@@ -347,8 +347,8 @@ type typeOff int32
 //
 
 type iface struct {
-	tab  *itab // 存放类型及方法指针信息
-	data unsafe.Pointer // 实例的副本的指针
+    tab  *itab // 存放类型及方法指针信息
+    data unsafe.Pointer // 实例的副本的指针
 }
 ```
 
@@ -369,12 +369,12 @@ type iface struct {
 // Needs to be in sync with
 // ../cmd/compile/internal/reflectdata/reflect.go:/^func.WriteTabs.
 type itab struct {
-	inter *interfacetype // 接口自身的静态类型
-	_type *_type // 接口绑定的具体实例的类型（动态类型）
+    inter *interfacetype // 接口自身的静态类型
+    _type *_type // 接口绑定的具体实例的类型（动态类型）
     // 存放具体类型的哈希值
-	hash  uint32 // copy of _type.hash. Used for type switches.
-	_     [4]byte
-	fun   [1]uintptr // variable sized. fun[0]==0 means _type does not implement inter.
+    hash  uint32 // copy of _type.hash. Used for type switches.
+    _     [4]byte
+    fun   [1]uintptr // variable sized. fun[0]==0 means _type does not implement inter.
 }
 ```
 
@@ -399,22 +399,22 @@ type itab struct {
 // ../reflect/type.go:/^type.rtype.
 // ../internal/reflectlite/type.go:/^type.rtype.
 type _type struct {
-	size       uintptr // 类型的大小
-	ptrdata    uintptr // size of memory prefix holding all pointers
-	hash       uint32 // 类型的哈希值
-	tflag      tflag // 类型的特征标记
-	align      uint8 // _type作为整体保存时的对齐字节数
-	fieldAlign uint8 // 当前结构字段的对齐字节数
-	kind       uint8 // 基础类型的枚举值，与 reflect.Kind 的值相同，决定了如何解析该类型
-	// function for comparing objects of this type
-	// (ptr to object A, ptr to object B) -> ==?
-	equal func(unsafe.Pointer, unsafe.Pointer) bool
-	// gcdata stores the GC type data for the garbage collector.
-	// If the KindGCProg bit is set in kind, gcdata is a GC program.
-	// Otherwise it is a ptrmask bitmap. See mbitmap.go for details.
-	gcdata    *byte // GC的相关信息
-	str       nameOff // 用来表示该类型的名称字符串在二进制文件中的偏移值。由链接器负责填充
-	ptrToThis typeOff // 用来表示类型元信息的指针在编译后二进制文件中的偏移值。由链接器负责填充
+    size       uintptr // 类型的大小
+    ptrdata    uintptr // size of memory prefix holding all pointers
+    hash       uint32 // 类型的哈希值
+    tflag      tflag // 类型的特征标记
+    align      uint8 // _type作为整体保存时的对齐字节数
+    fieldAlign uint8 // 当前结构字段的对齐字节数
+    kind       uint8 // 基础类型的枚举值，与 reflect.Kind 的值相同，决定了如何解析该类型
+    // function for comparing objects of this type
+    // (ptr to object A, ptr to object B) -> ==?
+    equal func(unsafe.Pointer, unsafe.Pointer) bool
+    // gcdata stores the GC type data for the garbage collector.
+    // If the KindGCProg bit is set in kind, gcdata is a GC program.
+    // Otherwise it is a ptrmask bitmap. See mbitmap.go for details.
+    gcdata    *byte // GC的相关信息
+    str       nameOff // 用来表示该类型的名称字符串在二进制文件中的偏移值。由链接器负责填充
+    ptrToThis typeOff // 用来表示类型元信息的指针在编译后二进制文件中的偏移值。由链接器负责填充
 }
 ```
 
@@ -444,14 +444,14 @@ func resolveTypeOff(ptrInModule unsafe.Pointer, off typeOff) *_type {}
 //
 
 type interfacetype struct {
-	typ     _type // 类型的通用元数据
-	pkgpath name // 包的名称
-	mhdr    []imethod // 接口的方法签名列表
+    typ     _type // 类型的通用元数据
+    pkgpath name // 包的名称
+    mhdr    []imethod // 接口的方法签名列表
 }
 
 type imethod struct {
-	name nameOff // 方法的名字在二进制文件中的偏移
-	ityp typeOff // 方法类型元数据在二进制文件中的偏移
+    name nameOff // 方法的名字在二进制文件中的偏移
+    ityp typeOff // 方法类型元数据在二进制文件中的偏移
 }
 ```
 
@@ -463,27 +463,27 @@ type imethod struct {
 package main
 
 type Calculator interface {
-	Add(a, b int) int
-	Sub(a, b int) int
+    Add(a, b int) int
+    Sub(a, b int) int
 }
 
 type Simpler struct {
-	ID int64
+    ID int64
 }
 
 //go:noinline
 func (s Simpler) Add(a, b int) int {
-	return a + b
+    return a + b
 }
 
 //go:noinline
 func (s Simpler) Sub(a, b int) int {
-	return a - b
+    return a - b
 }
 
 func main() {
-	var c Calculator = Simpler{ID: 1234}
-	c.Add(77, 88)
+    var c Calculator = Simpler{ID: 1234}
+    c.Add(77, 88)
 }
 
 // go tool compile -N -l -S main.go > main.S
@@ -581,32 +581,32 @@ func main() {
 package main
 
 type Calculator interface {
-	Add(a, b int) int
-	Sub(a, b int) int
+    Add(a, b int) int
+    Sub(a, b int) int
 }
 
 type Simpler struct {
-	A int64
-	B int32
+    A int64
+    B int32
 }
 
 //go:noinline
 func (s Simpler) Add(a, b int) int {
-	return a + b
+    return a + b
 }
 
 //go:noinline
 func (s Simpler) Sub(a, b int) int {
-	return a - b
+    return a - b
 }
 
 func CallAdd(c Calculator, a, b int) int {
-	return c.Add(a, b)
+    return c.Add(a, b)
 }
 
 func main() {
-	var c Calculator = Simpler{A: 1234, B: 5678}
-	CallAdd(c, 77, 88)
+    var c Calculator = Simpler{A: 1234, B: 5678}
+    CallAdd(c, 77, 88)
 }
 ```
 
@@ -615,58 +615,58 @@ func main() {
 ```asm
 // func main()
 "".main STEXT size=175 args=0x0 locals=0x50 funcid=0x0
-	0x0000 00000 (main.go:27)	TEXT	"".main(SB), ABIInternal, $80-0
+    0x0000 00000 (main.go:27)    TEXT    "".main(SB), ABIInternal, $80-0
 
     // 检查是否需要栈扩展
-	0x0000 00000 (main.go:27)	MOVQ	(TLS), CX
-	0x0009 00009 (main.go:27)	CMPQ	SP, 16(CX)
-	0x000d 00013 (main.go:27)	JLS	165
+    0x0000 00000 (main.go:27)    MOVQ    (TLS), CX
+    0x0009 00009 (main.go:27)    CMPQ    SP, 16(CX)
+    0x000d 00013 (main.go:27)    JLS    165
 
     // 准备 main 函数的栈空间
-	0x0013 00019 (main.go:27)	SUBQ	$80, SP
-	0x0017 00023 (main.go:27)	MOVQ	BP, 72(SP)
-	0x001c 00028 (main.go:27)	LEAQ	72(SP), BP
+    0x0013 00019 (main.go:27)    SUBQ    $80, SP
+    0x0017 00023 (main.go:27)    MOVQ    BP, 72(SP)
+    0x001c 00028 (main.go:27)    LEAQ    72(SP), BP
 
     // 初始化 Simpler 对象
-	0x0021 00033 (main.go:28)	MOVQ	$0, ""..autotmp_1+40(SP)
-	0x002a 00042 (main.go:28)	MOVL	$0, ""..autotmp_1+48(SP)
-	0x0032 00050 (main.go:28)	MOVQ	$1234, ""..autotmp_1+40(SP)
-	0x003b 00059 (main.go:28)	MOVL	$5678, ""..autotmp_1+48(SP)
+    0x0021 00033 (main.go:28)    MOVQ    $0, ""..autotmp_1+40(SP)
+    0x002a 00042 (main.go:28)    MOVL    $0, ""..autotmp_1+48(SP)
+    0x0032 00050 (main.go:28)    MOVQ    $1234, ""..autotmp_1+40(SP)
+    0x003b 00059 (main.go:28)    MOVL    $5678, ""..autotmp_1+48(SP)
 
     // 通过调用 runtime.convT2Inoptr 的方式创建一个接口变量
-	0x0043 00067 (main.go:28)	LEAQ	go.itab."".Simpler,"".Calculator(SB), AX
-	0x004a 00074 (main.go:28)	MOVQ	AX, (SP)                    // 第一个参数为接口对应实现的 itab 偏移
-	0x004e 00078 (main.go:28)	LEAQ	""..autotmp_1+40(SP), AX
-	0x0053 00083 (main.go:28)	MOVQ	AX, 8(SP)                   // 第二个参数为绑定对象的指针(地址)
-	// runtime/iface.go
-	//
-	// func convT2Inoptr(tab *itab, elem unsafe.Pointer) (i iface)
-	0x0058 00088 (main.go:28)	CALL	runtime.convT2Inoptr(SB)
+    0x0043 00067 (main.go:28)    LEAQ    go.itab."".Simpler,"".Calculator(SB), AX
+    0x004a 00074 (main.go:28)    MOVQ    AX, (SP)                    // 第一个参数为接口对应实现的 itab 偏移
+    0x004e 00078 (main.go:28)    LEAQ    ""..autotmp_1+40(SP), AX
+    0x0053 00083 (main.go:28)    MOVQ    AX, 8(SP)                   // 第二个参数为绑定对象的指针(地址)
+    // runtime/iface.go
+    //
+    // func convT2Inoptr(tab *itab, elem unsafe.Pointer) (i iface)
+    0x0058 00088 (main.go:28)    CALL    runtime.convT2Inoptr(SB)
 
-	// 从返回值中初始化接口变量 c
-	0x005d 00093 (main.go:28)	MOVQ	16(SP), AX      // 返回值的 iface.tab 字段
-	0x0062 00098 (main.go:28)	MOVQ	24(SP), CX      // 返回值的 iface.data 字段
-	0x0067 00103 (main.go:28)	MOVQ	AX, "".c+56(SP) // 使用返回值初始化 c.tab 字段
-	0x006c 00108 (main.go:28)	MOVQ	CX, "".c+64(SP) // 使用返回值初始化 c.data 字段
+    // 从返回值中初始化接口变量 c
+    0x005d 00093 (main.go:28)    MOVQ    16(SP), AX      // 返回值的 iface.tab 字段
+    0x0062 00098 (main.go:28)    MOVQ    24(SP), CX      // 返回值的 iface.data 字段
+    0x0067 00103 (main.go:28)    MOVQ    AX, "".c+56(SP) // 使用返回值初始化 c.tab 字段
+    0x006c 00108 (main.go:28)    MOVQ    CX, "".c+64(SP) // 使用返回值初始化 c.data 字段
 
-	// 准备调用 CallAdd 的参数
-	0x0071 00113 (main.go:29)	MOVQ	"".c+56(SP), AX // 准备参数 c 的 tab 字段
-	0x0076 00118 (main.go:29)	MOVQ	"".c+64(SP), CX // 准备参数 c 的 data 字段
-	0x007b 00123 (main.go:29)	MOVQ	AX, (SP)    // 初始化参数 c 的 tab 字段
-	0x007f 00127 (main.go:29)	MOVQ	CX, 8(SP)   // 初始化参数 c 的 data 字段
-	0x0084 00132 (main.go:29)	MOVQ	$77, 16(SP) // CallAdd 的第二个参数
-	0x008d 00141 (main.go:29)	MOVQ	$88, 24(SP) // CallAdd 的第三个参数
-	0x0096 00150 (main.go:29)	CALL	"".CallAdd(SB)
+    // 准备调用 CallAdd 的参数
+    0x0071 00113 (main.go:29)    MOVQ    "".c+56(SP), AX // 准备参数 c 的 tab 字段
+    0x0076 00118 (main.go:29)    MOVQ    "".c+64(SP), CX // 准备参数 c 的 data 字段
+    0x007b 00123 (main.go:29)    MOVQ    AX, (SP)    // 初始化参数 c 的 tab 字段
+    0x007f 00127 (main.go:29)    MOVQ    CX, 8(SP)   // 初始化参数 c 的 data 字段
+    0x0084 00132 (main.go:29)    MOVQ    $77, 16(SP) // CallAdd 的第二个参数
+    0x008d 00141 (main.go:29)    MOVQ    $88, 24(SP) // CallAdd 的第三个参数
+    0x0096 00150 (main.go:29)    CALL    "".CallAdd(SB)
 
     // 回收 main 函数的栈空间
-	0x009b 00155 (main.go:30)	MOVQ	72(SP), BP
-	0x00a0 00160 (main.go:30)	ADDQ	$80, SP
-	0x00a4 00164 (main.go:30)	RET
+    0x009b 00155 (main.go:30)    MOVQ    72(SP), BP
+    0x00a0 00160 (main.go:30)    ADDQ    $80, SP
+    0x00a4 00164 (main.go:30)    RET
 
     // 执行栈扩展方法, 扩展完成后返回函数入口再次检查
-	0x00a5 00165 (main.go:30)	NOP
-	0x00a5 00165 (main.go:27)	CALL	runtime.morestack_noctxt(SB)
-	0x00aa 00170 (main.go:27)	JMP	0
+    0x00a5 00165 (main.go:30)    NOP
+    0x00a5 00165 (main.go:27)    CALL    runtime.morestack_noctxt(SB)
+    0x00aa 00170 (main.go:27)    JMP    0
 ```
 
 关于以上内容我们需要关注几个点：
@@ -678,7 +678,7 @@ func main() {
 ```bash
 $ go tool compile -m -l main.go
 main.go:23:14: leaking param: c
-main.go:28:6: Simpler{...} escapes to heap		// 从这里可以发现 Simpler 对象逃逸到堆上了
+main.go:28:6: Simpler{...} escapes to heap        // 从这里可以发现 Simpler 对象逃逸到堆上了
 ...
 ```
 
@@ -687,53 +687,53 @@ main.go:28:6: Simpler{...} escapes to heap		// 从这里可以发现 Simpler 对
 ```asm
 // func CallAdd(c Calculator, a, b int) int
 "".CallAdd STEXT size=112 args=0x28 locals=0x30 funcid=0x0
-	0x0000 00000 (main.go:23)	TEXT	"".CallAdd(SB), ABIInternal, $48-40
-	// 栈扩展
-	0x0000 00000 (main.go:23)	MOVQ	(TLS), CX
-	0x0009 00009 (main.go:23)	CMPQ	SP, 16(CX)
-	0x000d 00013 (main.go:23)	JLS	105
+    0x0000 00000 (main.go:23)    TEXT    "".CallAdd(SB), ABIInternal, $48-40
+    // 栈扩展
+    0x0000 00000 (main.go:23)    MOVQ    (TLS), CX
+    0x0009 00009 (main.go:23)    CMPQ    SP, 16(CX)
+    0x000d 00013 (main.go:23)    JLS    105
 
-	// 开辟栈空间
-	0x000f 00015 (main.go:23)	SUBQ	$48, SP
-	0x0013 00019 (main.go:23)	MOVQ	BP, 40(SP)
-	0x0018 00024 (main.go:23)	LEAQ	40(SP), BP
+    // 开辟栈空间
+    0x000f 00015 (main.go:23)    SUBQ    $48, SP
+    0x0013 00019 (main.go:23)    MOVQ    BP, 40(SP)
+    0x0018 00024 (main.go:23)    LEAQ    40(SP), BP
 
-	// 给返回值赋零值初始化
-	0x001d 00029 (main.go:23)	MOVQ	$0, "".~r3+88(SP)
+    // 给返回值赋零值初始化
+    0x001d 00029 (main.go:23)    MOVQ    $0, "".~r3+88(SP)
 
-	// 实现动态调用
-	0x0026 00038 (main.go:24)	MOVQ	"".c+56(SP), AX     // 获取接口变量 c.tab 指针的值
-	0x002b 00043 (main.go:24)	TESTB	AL, (AX)            // 检查 itab.interfacetype 指针是否为空
-	0x002d 00045 (main.go:24)	MOVQ	"".a+72(SP), CX     // 获取参数 a 的值
-	0x0032 00050 (main.go:24)	MOVQ	"".b+80(SP), DX     // 获取参数 b 的值
-	0x0037 00055 (main.go:24)	MOVQ	24(AX), AX          // 获取 itab.fun 函数指针的值
-	//
-	// type itab struct {
+    // 实现动态调用
+    0x0026 00038 (main.go:24)    MOVQ    "".c+56(SP), AX     // 获取接口变量 c.tab 指针的值
+    0x002b 00043 (main.go:24)    TESTB    AL, (AX)            // 检查 itab.interfacetype 指针是否为空
+    0x002d 00045 (main.go:24)    MOVQ    "".a+72(SP), CX     // 获取参数 a 的值
+    0x0032 00050 (main.go:24)    MOVQ    "".b+80(SP), DX     // 获取参数 b 的值
+    0x0037 00055 (main.go:24)    MOVQ    24(AX), AX          // 获取 itab.fun 函数指针的值
+    //
+    // type itab struct {
     //     inter *interfacetype     // offset=0, size = 8
     //     _type *_type             // offset=8, size = 8
     //     hash  uint32             // offset=16, size = 4
     //     _     [4]byte            // offset=20, size = 4
     //     fun   [1]uintptr         // offset=24, size = variable
     // }
-	//
-	0x003b 00059 (main.go:24)	MOVQ	"".c+64(SP), BX     // 获取接口变量 c.data 的值
-	0x0040 00064 (main.go:24)	MOVQ	BX, (SP)            // 第一个参数 c.data
-	0x0044 00068 (main.go:24)	MOVQ	CX, 8(SP)           // 第二个参数 a
-	0x0049 00073 (main.go:24)	MOVQ	DX, 16(SP)          // 第三个参数 b
-	0x004e 00078 (main.go:24)	CALL	AX                  // itab.fun(c.data, a, b)
-	0x0050 00080 (main.go:24)	MOVQ	24(SP), AX          // 获取函数的返回值
-	0x0055 00085 (main.go:24)	MOVQ	AX, ""..autotmp_4+32(SP)    // 将返回值赋给一个临时变量
-	0x005a 00090 (main.go:24)	MOVQ	AX, "".~r3+88(SP)           // 为 CallAdd 的返回值赋值
+    //
+    0x003b 00059 (main.go:24)    MOVQ    "".c+64(SP), BX     // 获取接口变量 c.data 的值
+    0x0040 00064 (main.go:24)    MOVQ    BX, (SP)            // 第一个参数 c.data
+    0x0044 00068 (main.go:24)    MOVQ    CX, 8(SP)           // 第二个参数 a
+    0x0049 00073 (main.go:24)    MOVQ    DX, 16(SP)          // 第三个参数 b
+    0x004e 00078 (main.go:24)    CALL    AX                  // itab.fun(c.data, a, b)
+    0x0050 00080 (main.go:24)    MOVQ    24(SP), AX          // 获取函数的返回值
+    0x0055 00085 (main.go:24)    MOVQ    AX, ""..autotmp_4+32(SP)    // 将返回值赋给一个临时变量
+    0x005a 00090 (main.go:24)    MOVQ    AX, "".~r3+88(SP)           // 为 CallAdd 的返回值赋值
 
-	// 回收栈空间并返回
-	0x005f 00095 (main.go:24)	MOVQ	40(SP), BP
-	0x0064 00100 (main.go:24)	ADDQ	$48, SP
-	0x0068 00104 (main.go:24)	RET
+    // 回收栈空间并返回
+    0x005f 00095 (main.go:24)    MOVQ    40(SP), BP
+    0x0064 00100 (main.go:24)    ADDQ    $48, SP
+    0x0068 00104 (main.go:24)    RET
 
-	// 回收栈空间
-	0x0069 00105 (main.go:24)	NOP
-	0x0069 00105 (main.go:23)	CALL	runtime.morestack_noctxt(SB)
-	0x006e 00110 (main.go:23)	JMP	0
+    // 回收栈空间
+    0x0069 00105 (main.go:24)    NOP
+    0x0069 00105 (main.go:23)    CALL    runtime.morestack_noctxt(SB)
+    0x006e 00110 (main.go:23)    JMP    0
 ```
 
 同样，我们来看以上需要关注的几个点
@@ -768,25 +768,25 @@ main.go:28:6: Simpler{...} escapes to heap		// 从这里可以发现 Simpler 对
 package wear
 
 import (
-	"testing"
+    "testing"
 )
 
 type Identifier interface {
-	Inline() int32
-	NoInline() int32
+    Inline() int32
+    NoInline() int32
 }
 
 type ID struct {
-	id int32
+    id int32
 }
 
 func (id *ID) Inline() int32 {
-	return id.id
+    return id.id
 }
 
 //go:noinline
 func (id *ID) NoInline() int32 {
-	return id.id
+    return id.id
 }
 
 //
@@ -796,84 +796,84 @@ func (id *ID) NoInline() int32 {
 // for use in cases where the reflect code is so clever that
 // the compiler cannot follow.
 func escapes(x interface{}) {
-	if dummy.b {
-		dummy.x = x
-	}
+    if dummy.b {
+        dummy.x = x
+    }
 }
 
 var dummy struct {
-	b bool
-	x interface{}
+    b bool
+    x interface{}
 }
 
 //go:noinline
 func DirectInline(id *ID) int32 {
-	return id.Inline()
+    return id.Inline()
 }
 
 //go:noinline
 func DirectNoInline(id *ID) int32 {
-	return id.NoInline()
+    return id.NoInline()
 }
 
 //go:noinline
 func InterfaceInline(id Identifier) int32 {
-	return id.Inline()
+    return id.Inline()
 }
 
 //go:noinline
 func InterfaceNoInline(id Identifier) int32 {
-	return id.NoInline()
+    return id.NoInline()
 }
 
 func BenchmarkID_Direct(b *testing.B) {
-	var ret int32
+    var ret int32
 
-	b.Run("noinline", func(b *testing.B) {
-		x := &ID{id: 1234}
-		escapes(x)
-		b.ResetTimer()
+    b.Run("noinline", func(b *testing.B) {
+        x := &ID{id: 1234}
+        escapes(x)
+        b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
-			ret = DirectNoInline(x)
-		}
-	})
-	b.Run("inline", func(b *testing.B) {
-		x := &ID{id: 1234}
-		escapes(x)
-		b.ResetTimer()
+        for i := 0; i < b.N; i++ {
+            ret = DirectNoInline(x)
+        }
+    })
+    b.Run("inline", func(b *testing.B) {
+        x := &ID{id: 1234}
+        escapes(x)
+        b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
-			ret = DirectInline(x)
-		}
-	})
+        for i := 0; i < b.N; i++ {
+            ret = DirectInline(x)
+        }
+    })
 
-	_ = ret
+    _ = ret
 }
 
 func BenchmarkID_Interface(b *testing.B) {
-	var ret int32
+    var ret int32
 
-	b.Run("noinline", func(b *testing.B) {
-		var x Identifier = &ID{id: 1234}
-		escapes(x)
-		b.ResetTimer()
+    b.Run("noinline", func(b *testing.B) {
+        var x Identifier = &ID{id: 1234}
+        escapes(x)
+        b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
-			ret = InterfaceNoInline(x)
-		}
-	})
-	b.Run("inline", func(b *testing.B) {
-		var x Identifier = &ID{id: 1234}
-		escapes(x)
-		b.ResetTimer()
+        for i := 0; i < b.N; i++ {
+            ret = InterfaceNoInline(x)
+        }
+    })
+    b.Run("inline", func(b *testing.B) {
+        var x Identifier = &ID{id: 1234}
+        escapes(x)
+        b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
-			ret = InterfaceInline(x)
-		}
-	})
+        for i := 0; i < b.N; i++ {
+            ret = InterfaceInline(x)
+        }
+    })
 
-	_ = ret
+    _ = ret
 }
 ```
 
@@ -886,26 +886,26 @@ func BenchmarkID_Interface(b *testing.B) {
 goos: linux
 goarch: amd64
 cpu: Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz
-BenchmarkID_Direct/noinline         	279827311	         4.230 ns/op
-BenchmarkID_Direct/noinline         	284898583	         4.198 ns/op
-BenchmarkID_Direct/noinline         	285709496	         4.204 ns/op
-BenchmarkID_Direct/noinline         	285689091	         4.201 ns/op
-BenchmarkID_Direct/noinline         	285710798	         4.202 ns/op
-BenchmarkID_Direct/inline           	502259485	         2.392 ns/op
-BenchmarkID_Direct/inline           	495132288	         2.388 ns/op
-BenchmarkID_Direct/inline           	495564354	         2.390 ns/op
-BenchmarkID_Direct/inline           	502272045	         2.390 ns/op
-BenchmarkID_Direct/inline           	502392055	         2.390 ns/op
-BenchmarkID_Interface/noinline      	266717086	         4.513 ns/op
-BenchmarkID_Interface/noinline      	266016693	         4.504 ns/op
-BenchmarkID_Interface/noinline      	266364024	         4.515 ns/op
-BenchmarkID_Interface/noinline      	263780900	         4.503 ns/op
-BenchmarkID_Interface/noinline      	266884749	         4.501 ns/op
-BenchmarkID_Interface/inline        	265814242	         4.497 ns/op
-BenchmarkID_Interface/inline        	266684151	         4.499 ns/op
-BenchmarkID_Interface/inline        	266325372	         4.539 ns/op
-BenchmarkID_Interface/inline        	266335770	         4.524 ns/op
-BenchmarkID_Interface/inline        	264714562	         4.511 ns/op
+BenchmarkID_Direct/noinline             279827311             4.230 ns/op
+BenchmarkID_Direct/noinline             284898583             4.198 ns/op
+BenchmarkID_Direct/noinline             285709496             4.204 ns/op
+BenchmarkID_Direct/noinline             285689091             4.201 ns/op
+BenchmarkID_Direct/noinline             285710798             4.202 ns/op
+BenchmarkID_Direct/inline               502259485             2.392 ns/op
+BenchmarkID_Direct/inline               495132288             2.388 ns/op
+BenchmarkID_Direct/inline               495564354             2.390 ns/op
+BenchmarkID_Direct/inline               502272045             2.390 ns/op
+BenchmarkID_Direct/inline               502392055             2.390 ns/op
+BenchmarkID_Interface/noinline          266717086             4.513 ns/op
+BenchmarkID_Interface/noinline          266016693             4.504 ns/op
+BenchmarkID_Interface/noinline          266364024             4.515 ns/op
+BenchmarkID_Interface/noinline          263780900             4.503 ns/op
+BenchmarkID_Interface/noinline          266884749             4.501 ns/op
+BenchmarkID_Interface/inline            265814242             4.497 ns/op
+BenchmarkID_Interface/inline            266684151             4.499 ns/op
+BenchmarkID_Interface/inline            266325372             4.539 ns/op
+BenchmarkID_Interface/inline            266335770             4.524 ns/op
+BenchmarkID_Interface/inline            264714562             4.511 ns/op
 PASS
 
 
@@ -915,26 +915,26 @@ PASS
 goos: linux
 goarch: amd64
 cpu: Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz
-BenchmarkID_Direct/noinline         	368764939	         3.224 ns/op
-BenchmarkID_Direct/noinline         	378324794	         3.168 ns/op
-BenchmarkID_Direct/noinline         	378442860	         3.165 ns/op
-BenchmarkID_Direct/noinline         	378489505	         3.167 ns/op
-BenchmarkID_Direct/noinline         	378627369	         3.169 ns/op
-BenchmarkID_Direct/inline           	562518901	         2.137 ns/op
-BenchmarkID_Direct/inline           	562454290	         2.139 ns/op
-BenchmarkID_Direct/inline           	564468903	         2.123 ns/op
-BenchmarkID_Direct/inline           	566852649	         2.118 ns/op
-BenchmarkID_Direct/inline           	568746331	         2.117 ns/op
-BenchmarkID_Interface/noinline      	343047410	         3.491 ns/op
-BenchmarkID_Interface/noinline      	342796851	         3.494 ns/op
-BenchmarkID_Interface/noinline      	343993393	         3.508 ns/op
-BenchmarkID_Interface/noinline      	343607748	         3.485 ns/op
-BenchmarkID_Interface/noinline      	344529655	         3.484 ns/op
-BenchmarkID_Interface/inline        	344531984	         3.476 ns/op
-BenchmarkID_Interface/inline        	344546524	         3.479 ns/op
-BenchmarkID_Interface/inline        	345821228	         3.476 ns/op
-BenchmarkID_Interface/inline        	345530970	         3.472 ns/op
-BenchmarkID_Interface/inline        	342848203	         3.485 ns/op
+BenchmarkID_Direct/noinline             368764939             3.224 ns/op
+BenchmarkID_Direct/noinline             378324794             3.168 ns/op
+BenchmarkID_Direct/noinline             378442860             3.165 ns/op
+BenchmarkID_Direct/noinline             378489505             3.167 ns/op
+BenchmarkID_Direct/noinline             378627369             3.169 ns/op
+BenchmarkID_Direct/inline               562518901             2.137 ns/op
+BenchmarkID_Direct/inline               562454290             2.139 ns/op
+BenchmarkID_Direct/inline               564468903             2.123 ns/op
+BenchmarkID_Direct/inline               566852649             2.118 ns/op
+BenchmarkID_Direct/inline               568746331             2.117 ns/op
+BenchmarkID_Interface/noinline          343047410             3.491 ns/op
+BenchmarkID_Interface/noinline          342796851             3.494 ns/op
+BenchmarkID_Interface/noinline          343993393             3.508 ns/op
+BenchmarkID_Interface/noinline          343607748             3.485 ns/op
+BenchmarkID_Interface/noinline          344529655             3.484 ns/op
+BenchmarkID_Interface/inline            344531984             3.476 ns/op
+BenchmarkID_Interface/inline            344546524             3.479 ns/op
+BenchmarkID_Interface/inline            345821228             3.476 ns/op
+BenchmarkID_Interface/inline            345530970             3.472 ns/op
+BenchmarkID_Interface/inline            342848203             3.485 ns/op
 PASS
 
 
@@ -944,26 +944,26 @@ PASS
 goos: linux
 goarch: amd64
 cpu: Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz
-BenchmarkID_Direct/noinline         	382653601	         3.130 ns/op
-BenchmarkID_Direct/noinline         	384281214	         3.122 ns/op
-BenchmarkID_Direct/noinline         	384861854	         3.119 ns/op
-BenchmarkID_Direct/noinline         	387765333	         3.110 ns/op
-BenchmarkID_Direct/noinline         	387017601	         3.102 ns/op
-BenchmarkID_Direct/inline           	576926984	         2.084 ns/op
-BenchmarkID_Direct/inline           	576976302	         2.081 ns/op
-BenchmarkID_Direct/inline           	577804605	         2.085 ns/op
-BenchmarkID_Direct/inline           	576790406	         2.077 ns/op
-BenchmarkID_Direct/inline           	577854663	         2.086 ns/op
-BenchmarkID_Interface/noinline      	347317480	         3.482 ns/op
-BenchmarkID_Interface/noinline      	346113297	         3.463 ns/op
-BenchmarkID_Interface/noinline      	345904214	         3.476 ns/op
-BenchmarkID_Interface/noinline      	345881388	         3.474 ns/op
-BenchmarkID_Interface/noinline      	345325503	         3.481 ns/op
-BenchmarkID_Interface/inline        	345897781	         3.480 ns/op
-BenchmarkID_Interface/inline        	344225434	         3.493 ns/op
-BenchmarkID_Interface/inline        	339639932	         3.485 ns/op
-BenchmarkID_Interface/inline        	344404767	         3.488 ns/op
-BenchmarkID_Interface/inline        	344211804	         3.487 ns/op
+BenchmarkID_Direct/noinline             382653601             3.130 ns/op
+BenchmarkID_Direct/noinline             384281214             3.122 ns/op
+BenchmarkID_Direct/noinline             384861854             3.119 ns/op
+BenchmarkID_Direct/noinline             387765333             3.110 ns/op
+BenchmarkID_Direct/noinline             387017601             3.102 ns/op
+BenchmarkID_Direct/inline               576926984             2.084 ns/op
+BenchmarkID_Direct/inline               576976302             2.081 ns/op
+BenchmarkID_Direct/inline               577804605             2.085 ns/op
+BenchmarkID_Direct/inline               576790406             2.077 ns/op
+BenchmarkID_Direct/inline               577854663             2.086 ns/op
+BenchmarkID_Interface/noinline          347317480             3.482 ns/op
+BenchmarkID_Interface/noinline          346113297             3.463 ns/op
+BenchmarkID_Interface/noinline          345904214             3.476 ns/op
+BenchmarkID_Interface/noinline          345881388             3.474 ns/op
+BenchmarkID_Interface/noinline          345325503             3.481 ns/op
+BenchmarkID_Interface/inline            345897781             3.480 ns/op
+BenchmarkID_Interface/inline            344225434             3.493 ns/op
+BenchmarkID_Interface/inline            339639932             3.485 ns/op
+BenchmarkID_Interface/inline            344404767             3.488 ns/op
+BenchmarkID_Interface/inline            344211804             3.487 ns/op
 PASS
 ```
 
@@ -982,8 +982,8 @@ PASS
 // runtime2.go
 //
 type eface struct {
-	_type *_type
-	data  unsafe.Pointer
+    _type *_type
+    data  unsafe.Pointer
 }
 ```
 
