@@ -57,3 +57,226 @@ func main() {
 
 #### 通信：chan
 
+通道 channel 是 goroutine 之间通信和同步的重要组件。Go 语言的哲学是“不要通过共享内存来通信，而是通过通信来共享内存”。在 Go 语言中通道是有类型的，未初始化的同党没有任何意义，其值是 nil。我们可以通过 `make` 方法来初始化一个无缓冲或有缓存的通道。我们可以通过 `len` 和 `cap` 方法来获取通道中未读取的数据数和通道的容量（无缓存的通道的 len 和 cap 都是 0）。通道的使用一般有以下几种方式
+
+1、通过无缓存的通道实现 goroutine 之前的同步等待
+
+```go
+func main() {
+    c := make(chan struct{})
+
+    go func() {
+        var sum int
+        for i := 0; i < 1000; i++ {
+            sum += i
+            time.Sleep(time.Millisecond)
+        }
+
+        fmt.Printf("Sum = %d\n", sum)
+        c <- struct{}{}
+        close(c)
+    }()
+
+    <-c
+    fmt.Println("Goroutine terminated ...")
+}
+```
+
+2、在关闭通道后，已写入缓冲通道的数据不会消息，它可以缓冲和适配两个 goroutine 处理速率不一致的情况，有削峰填谷和增大吞吐量的功能
+
+```go
+func main() {
+    c := make(chan int, 888)
+
+    go func() {
+        for i := 0; i < 1000; i++ {
+            c <- i
+        }
+
+        close(c)
+        log.Println("Provides 1000 numbers ...")
+    }()
+
+    stop := make(chan struct{})
+    go func() {
+        var sum int
+        for v := range c {
+            sum += v
+            time.Sleep(time.Millisecond)
+        }
+        log.Printf("Sum = %d\n", sum)
+        stop <- struct{}{}
+        close(stop)
+    }()
+
+    <-stop
+    
+    // Output:
+    //  2022/05/16 23:58:13 Provides 1000 numbers ...
+    //  2022/05/16 23:58:14 Sum = 499500
+}
+```
+
+##### 操作不同状态的 chan 可能出现的情况
+
+* panic
+  * 向已经关闭的通道写数据会导致 panic
+  * 重复关闭通道会导致 panic
+* 阻塞
+  * 向未初始化的通道读数据或写数据会导致 goroutine 永久阻塞
+  * 向缓冲区已满的通道写数据会导致 goroutine 阻塞
+  * 读取没有缓冲数据的通道会导致 goroutine 阻塞
+* 非阻塞
+  * 读取已经关闭的通道不会阻塞，而是直接返回通道元素类型的零值，可以使用 `comma, ok` 语法来检查通道是否关闭
+  * 向有缓冲且没有满的通道读写数据不会导致阻塞
+
+#### WaitGroup
+
+`sync` 包中提供了多个 goroutine 同步的机制，主要是用过 `WaitGroup` 来实现的
+
+```go
+func main() {
+    urls := []string{
+        "https://www.github.com",
+        "https://www.stackoverflow.com",
+        "https://news.ycombinator.com",
+    }
+
+    var wg sync.WaitGroup
+    for _, url := range urls {
+        wg.Add(1)
+        go func(url string) {
+            defer wg.Done()
+
+            resp, err := http.Get(url)
+            if err != nil {
+                log.Printf("Request error: %s\n", err)
+                return
+            }
+            defer func() { _ = resp.Body.Close() }()
+
+            log.Printf("Request %q: %s\n", url, resp.Status)
+        }(url)
+    }
+
+    wg.Wait()
+
+    // Output:
+    //    2022/05/17 00:09:48 Request "https://news.ycombinator.com": 200 OK
+    //    2022/05/17 00:09:48 Request "https://www.github.com": 200 OK
+    //    2022/05/17 00:09:49 Request "https://www.stackoverflow.com": 200 OK
+}
+```
+
+#### select
+
+`select` 是类 UNIX 系统中提供用于多路复用的系统 API。Go语言借助其多路复用的概念，提供了 `select` 关键字，同于同时监听多个通道。
+
+1、当没有通道可读/可写时，select 是阻塞的
+
+2、只要监听的通道有一个是可读或可写的，则会直接进入就绪通道的处理逻辑
+
+3、如果有多个通道可读/可写，则 select 随机选择一个镜像处理
+
+```go
+func main() {
+    ci := make(chan int)
+    cc := make(chan struct{})
+    close(cc)
+
+    go func() {
+        for {
+            select {
+            case ci <- 0:
+            case ci <- 1:
+            case <-cc:
+                log.Println("closed channel")
+            }
+        }
+    }()
+
+    for i := 0; i < 3; i++ {
+        log.Println(<-ci)
+    }
+
+    // Output:
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 0
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 0
+    //  2022/05/17 00:19:29 closed channel
+    //  2022/05/17 00:19:29 1
+}
+```
+
+#### 扇入（Fan in）和扇出（Fan out）
+
+所谓扇入就是将多路通道聚合到一条通道中处理，在 Go 中最简单的扇入就是使用 select 聚合多条通道。当生产者的速度很慢时，需要使用扇入来聚合多个生产者以满足消费者。
+
+扇出就是将一条通道发散到多条通道中处理，在Go语言中就是使用 go 关键字启动多个 goroutine 并发处理。当消费者速度很慢时，就需要使用扇出技术来并发处理任务。
+
+#### 通知退出机制
+
+select 能感知到所监听的某个通道被关闭了，然后进行相应的处理，由此我们可以实现“通知退出机制”（close channel to broadcast）
+
+```go
+func Generator(done <-chan struct{}) <-chan int {
+	ch := make(chan int)
+	go func() {
+		defer close(ch)
+
+		for {
+			select {
+			case <-done:
+				return
+			case ch <- rand.Int():
+			}
+		}
+	}()
+	return ch
+}
+
+func main() {
+	done := make(chan struct{})
+	g := Generator(done)
+
+	log.Println(<-g)
+	log.Println(<-g)
+
+	close(done)
+
+	log.Println(<-g)
+	log.Println(<-g)
+
+	// Output:
+	//  2022/05/17 00:39:31 5577006791947779410
+	//  2022/05/17 00:39:31 8674665223082153551
+	//  2022/05/17 00:39:31 6129484611666145821
+	//  2022/05/17 00:39:31 0
+
+	// 这里在 close 之后有2个操作在同步进行
+	//	1. 尝试从 g 中读取一个随机数
+	//	2. select 检查是否有哪个通道准备就绪
+	//
+	// 如果此时 select 选择 (1) 则可以继续执行后续的输出随机数
+	// 如果次数 select 选择 (2) 则后续输出零值
+
+	// Output:
+	//  2022/05/17 00:39:48 5577006791947779410
+	//  2022/05/17 00:39:48 8674665223082153551
+	//  2022/05/17 00:39:48 0
+	//  2022/05/17 00:39:48 0
+}
+```
+
+
+
+### 并发范式
+
