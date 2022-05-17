@@ -280,3 +280,206 @@ func main() {
 
 ### 并发范式
 
+1、在应用中，比较常见的场景就是调用一个统一的全局生成器服务，用于生成订单号、序列号和随机数等。
+
+```go
+func Generate(done <-chan struct{}) <-chan int {
+	ch := make(chan int, 100)
+
+	go func() {
+		defer close(ch)
+
+		for {
+			select {
+			case <-done:
+				return
+			case ch <- rand.Int():
+			}
+		}
+	}()
+	return ch
+}
+
+func Generator(done <-chan struct{}) <-chan int {
+	ch := make(chan int)
+	go func() {
+		defer close(ch)
+
+		a := Generate(done)
+		b := Generate(done)
+
+		for {
+			select {
+			case ch <- <-a: // 扇入
+			case ch <- <-b: // 扇入
+			case <-done:
+				return
+			}
+		}
+	}()
+	return ch
+}
+
+func main() {
+	done := make(chan struct{})
+
+	g := Generator(done)
+	for i := 0; i < 10; i++ {
+		fmt.Println("Generate", <-g)
+	}
+
+	close(done)
+}
+```
+
+2、具有多个相同管道类型参数的函数可以组合成一个调用链，形成一个类管道操作
+
+```go
+func Multiply(ns <-chan int, val int) <-chan int {
+	ch := make(chan int)
+	go func() {
+		for n := range ns {
+			ch <- n * val
+		}
+
+		close(ch)
+	}()
+	return ch
+}
+
+func main() {
+	ch := make(chan int)
+	go func() {
+		for i := 0; i < 100; i++ {
+			ch <- i
+		}
+
+		close(ch)
+	}()
+
+	g2 := Multiply(ch, 2)
+	g6 := Multiply(g2, 3)
+	g48 := Multiply(g6, 8)
+
+	for v := range g48 {
+		fmt.Println(v)
+	}
+}
+```
+
+3、每个请求使用一个 goroutine 进行处理
+
+```go
+//
+// net/http/server.go
+//
+
+// Serve accepts incoming connections on the Listener l, creating a
+// new service goroutine for each. The service goroutines read requests and
+// then call srv.Handler to reply to them.
+//
+// HTTP/2 support is only enabled if the Listener returns *tls.Conn
+// connections and they were configured with "h2" in the TLS
+// Config.NextProtos.
+//
+// Serve always returns a non-nil error and closes l.
+// After Shutdown or Close, the returned error is ErrServerClosed.
+func (srv *Server) Serve(l net.Listener) error {
+	if fn := testHookServerServe; fn != nil {
+		fn(srv, l) // call hook with unwrapped listener
+	}
+
+	origListener := l
+	l = &onceCloseListener{Listener: l}
+	defer l.Close()
+
+	if err := srv.setupHTTP2_Serve(); err != nil {
+		return err
+	}
+
+	if !srv.trackListener(&l, true) {
+		return ErrServerClosed
+	}
+	defer srv.trackListener(&l, false)
+
+	baseCtx := context.Background()
+	if srv.BaseContext != nil {
+		baseCtx = srv.BaseContext(origListener)
+		if baseCtx == nil {
+			panic("BaseContext returned a nil context")
+		}
+	}
+
+	var tempDelay time.Duration // how long to sleep on accept failure
+
+	ctx := context.WithValue(baseCtx, ServerContextKey, srv)
+	for {
+		rw, err := l.Accept()
+		if err != nil {
+			select {
+			case <-srv.getDoneChan():
+				return ErrServerClosed
+			default:
+			}
+			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
+				}
+				if max := 1 * time.Second; tempDelay > max {
+					tempDelay = max
+				}
+				srv.logf("http: Accept error: %v; retrying in %v", err, tempDelay)
+				time.Sleep(tempDelay)
+				continue
+			}
+			return err
+		}
+		connCtx := ctx
+		if cc := srv.ConnContext; cc != nil {
+			connCtx = cc(connCtx, rw)
+			if connCtx == nil {
+				panic("ConnContext returned nil")
+			}
+		}
+		tempDelay = 0
+		c := srv.newConn(rw)
+		c.setState(c.rwc, StateNew, runHooks) // before Serve can return
+		go c.serve(connCtx) // 这里对每个连接都会新开一个 goroutine 进行处理
+	}
+}
+```
+
+4、固定数量的 goroutine 池
+
+```go
+type Task struct{}
+
+func Work(task *Task) {
+	// do work
+}
+
+func Start(tasks <-chan *Task, n int) {
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for t := range tasks {
+				Work(t)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func main() {
+	ch := make(chan *Task)
+	Start(ch, 10)
+}
+```
+
+### Context标准库
+
