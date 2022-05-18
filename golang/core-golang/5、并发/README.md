@@ -483,3 +483,46 @@ func main() {
 
 ### Context标准库
 
+context 库的设计目的就是跟踪 goroutine 调用树，并在这些 goroutine 调用树中传递通知和元数据：
+
+* 退出通知机制：通知可以传递给整个 goroutine 调用树上的每一个 goroutine
+* 传递数据：数据可以传递给整个 goroutine 调用树上的每一个 goroutine
+
+#### Context 标准库中的 API 函数
+
+1、首先是用于构造 Context 树的根节点对象，一般作为后续 `With*` 包装方法的实参
+
+```go
+func Background() Context
+func TODO() Context
+```
+
+2、`With*` 包装方法用来构建具有不同功能的 Context 对象
+
+```go
+// 创建带有取消功能的上下文对象
+func WithCancel(parent Context) (ctx Context, cancel CancelFUnc)
+
+// 创建带有超时取消功能的上下文对象
+func WithDeadline(parent Context, deadline time.Time) (ctx Context, cancel CancelFUnc)
+func WithTimeout(parent Context, timeout time.Duration) (ctx Context, cancel CancelFUnc)
+
+// 创建一个能传递数据的上下文对象
+func WithValue(parent Context, key, val interface{}) Context
+```
+
+#### 使用 Context 传递数据的争议
+
+首先使用 context 包主要是为了解决 goroutine 的通知退出，传递数据只是一个额外功能。而使用这个功能会存在以下问题
+
+* 传递的都是 interface{} 类型的值，编译器不能进行严格的类型校验
+* 从 interface{} 到具体类型需要使用类型断言和接口查询，这会带来一定的运行时开销和性能损失
+* 值在传递过程中有可能被后续的服务覆盖，且不容易被发现（使用包私有类型可以解决`type userKey struct{}`）
+* 传递的信息不简明，比较晦涩。不能通过代码或文档一眼看到传递的是什么，不利于后续维护。
+
+最佳实践：使用 context 传递的信息不能影响正常的业务流程，且程序不要期待在 context 中获取到一些必须的参数等
+
+
+
+### 并发模型
+
