@@ -236,3 +236,42 @@ type Value struct {
 
 ### 基础类型
 
+`Type` 接口上有一个 `Kind()` 方法，返回的是一个整数枚举值，不同的值代表不同的类型（只是一个抽象的概念，并不是一个“类型”）。这个类型是根据编译器、运行时构建类型的内部数据结构的不同来划分的，不同的基础类型，其构建的最终内部数据结构不一样。在 `reflect` 包中，总共定义了以下类型枚举值：
+
+```go
+type Kind uint
+
+const (
+	Invalid Kind = iota
+	Bool
+	Int
+	Int8
+	Int16
+	Int32
+	Int64
+	Uint
+	Uint8
+	Uint16
+	Uint32
+	Uint64
+	Uintptr
+	Float32
+	Float64
+	Complex64
+	Complex128
+	Array
+	Chan
+	Func
+	Interface
+	Map
+	Ptr
+	Slice
+	String
+	Struct
+	UnsafePointer
+)
+```
+
+#### 底层类型与基础类型
+
+底层类型是针对每一个具体的类型定义的，而”基础类型“只是一个抽象的概念仅用于区分不同的类型
