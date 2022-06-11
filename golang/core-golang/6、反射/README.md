@@ -234,7 +234,7 @@ type Value struct {
 
 
 
-### 基础类型
+#### 基础类型
 
 `Type` 接口上有一个 `Kind()` 方法，返回的是一个整数枚举值，不同的值代表不同的类型（只是一个抽象的概念，并不是一个“类型”）。这个类型是根据编译器、运行时构建类型的内部数据结构的不同来划分的，不同的基础类型，其构建的最终内部数据结构不一样。在 `reflect` 包中，总共定义了以下类型枚举值：
 
@@ -272,6 +272,157 @@ const (
 )
 ```
 
-#### 底层类型与基础类型
+##### 底层类型与基础类型
 
 底层类型是针对每一个具体的类型定义的，而”基础类型“只是一个抽象的概念仅用于区分不同的类型
+
+
+
+### 反射规则
+
+反射对象 `Value`，`Type` 和实例之间的相互转换 API 如下所示：
+
+
+
+#### 从实例到 Value 对象
+
+通过实例获得 `Value` 对象，可以直接使用 `reflect.ValueOf` 方法：
+
+```go
+func ValueOf(i interface{}) Value
+```
+
+
+
+#### 从实例到 Type 对象
+
+通过实例获得 `Type` 对象，可以直接使用 `reflect.TypeOf` 方法：
+
+```go
+func TypeOf(i interface{}) Type
+```
+
+
+
+#### 从 Type 对象到 Value 对象
+
+由于 `Type` 中只有类型信息，所以直接从一个 `Type` 对象里无法直接获得实例的 `Value` 对象，但是可以通过在 `Type` 对象上构建一个新的 `Value` 对象
+
+```go
+// 通过 Type 返回一个 Value, 该 Value 的类型是 *Type
+func New(typ Type) Value
+
+// 返回一个 Type 类型的零值，返回的 Value 对象即不可寻址也不可修改
+func Zero(typ Type) Value
+```
+
+如果知道 `Type` 类型值的地址，则还有一个函数可以根据 `Type` 和该地址恢复出一个 `Value` 对象
+
+```go
+// 将指针 p 所指向的位置的内存解释为 Type 类型
+func NewAt(typ Type, p unsafe.Pointer) Value
+```
+
+
+
+#### 从 Value 对象到 Type 对象
+
+因为 `Value` 对象内部保存有 `Type` 类型的指针，所以我们可以通过如下方法获得 `Type` 对象
+
+```go
+func (v Value) Type() Type
+```
+
+
+
+#### 从 Value 对象到实例
+
+由于 `Value` 对象中包含对象的类型和值信息，所以在 `Value` 对象上提供了丰富的方法来实现到实例的转换
+
+```go
+// 将 Value 对象转换为一个空接口实例，之后可以使用接口断言或者接口查询来进行转换
+func (v Value) Interface() (i interface{})
+
+
+func (v Value) Int() int64
+func (v Value) Float() float64
+func (v Value) Bool() bool
+```
+
+
+
+#### 从 Value 指针对象到 Value 值对象
+
+从一个指针类型的 `Value` 对象获得值类型的 `Value` 对象，可以使用如下方法
+
+```go
+// 错误的调用该方法将会导致 panic
+func (v Value) Elem() Value
+
+// 不会引发 panic
+func Indirect(v Value) Value {
+	if v.Kind() != Ptr {
+		return v
+	}
+	return v.Elem()
+}
+```
+
+
+
+#### 指针类型的 Type 对象和值类型的 Type
+
+在 `reflect` 包中有以下方法可以实现不同类型 `Type` 对象的转换
+
+```go
+type Type interface {
+    // 从指针类型的 Type 到值类型的 Type
+    Elem() Type
+}
+
+// 从值类型的 Type 到指针类型的 Type
+func PtrTo(t Type) Type
+```
+
+
+
+#### Value 对象的可修改性
+
+对于 `Value` 对象的修改涉及以下方法：
+
+```go
+// 返回 Value 对象是否可修改
+func (v Value) CanSet() bool
+
+// 修改 Value 对象的内容
+func (v Value) Set(x Value)
+```
+
+如果我们调用 `reflect.ValueOf` 时传入的是一个值类型实例，则获得的 `Value` 对象实际上是执行原对象的副本，那么这个 `Value` 对象就是不可修改的。如果传入的是一个指针，虽然 `Value` 对象获得的也是一个指针副本，但是我们可以通过指针修改到原始对象，所以这个 `Value` 对象就是可修改的。
+
+```go
+type User struct {
+	Name string
+	Age  int
+}
+
+func main() {
+	user := User{Name: "hello", Age: 18}
+
+	rv := reflect.ValueOf(user)
+	rp := reflect.ValueOf(&user)
+
+	fmt.Printf("rv.CanSet() = %v\n", rv.CanSet())
+	fmt.Printf("rp.CanSet() = %v\n", rp.Elem().CanSet())
+	// rv.CanSet() = false
+	// rp.CanSet() = true
+
+	fmt.Printf("user = %+v\n", user)
+	// user = {Name:hello Age:18}
+
+	rp.Elem().FieldByName("Name").Set(reflect.ValueOf("world"))
+	fmt.Printf("user = %+v\n", user)
+	// user = {Name:world Age:18}
+}
+```
+
