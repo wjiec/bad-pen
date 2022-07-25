@@ -407,3 +407,93 @@ type mspan struct {
 #### 内存分配器高效的秘诀
 
 线程私有且不被共享的 mcache 是实现高性能无锁分配的核心，而 mcentral 的作用是在多个 mcache 间提高 object 利用率，避免内存浪费。将 span 归还给 mheap 是为了平衡不同规格 object 的需求。
+
+
+
+### 初始化（过时的）
+
+内存分配器和垃圾回收算法都依赖于连续地址，所以在初始化阶段，预先保留了很大的一段虚拟地址空间（并不会分配内存）。这一段空间会会划分为三个区域：
+
+* `spans`：512M，用于表示页所属 span 的指针数组
+* `bitmap`：32GB，GC标记位图
+* `arena`：512GB，用户内存分配区域
+
+#### mmap
+
+函数 mmap 要求操作系统内核创建新的虚拟存储器区域，可指定起始地址和长度。Windows 没有此函数，对应的 API 是 `VirtualAlloc`。操作系统在对用户的内存申请请求时大多采取机会主义分配策略，申请内存时，仅承诺但不是立即分配物理内存。物理内存的分配在写操作导致缺页异常时发生，通常是按页提供的。
+
+
+
+### 分配（过时的）
+
+为对象分配内存需区分是在栈上还是在堆上完成。通常情况下，编译器会尽可能地使用寄存器和栈来存储对象，这有助于提升性能，减少垃圾回收器压力。
+
+对于同一段代码，在是否启用内联的情况下也会出现不同的情况：
+
+```go
+package main
+
+func assign() *int {
+  x := new(int)
+  *x = 1234
+  return x
+}
+
+func main() {
+  println(*assign())
+}
+```
+
+此时我们通过 `-gcflags="-l"` 禁用内联，并使用 `go tool objdump -s "assign" <binary>` 来查看汇编代码
+
+```asm
+//
+// go build -gcflags="-l" assign.go
+// go tool objdump -s "main\.assign" assign
+//
+
+TEXT main.assign(SB) /root/workspace/gonotes/mm/assign.go
+  assign.go:3		0x4553e0		493b6610		CMPQ 0x10(R14), SP			
+  assign.go:3		0x4553e4		7630			JBE 0x455416				
+  assign.go:3		0x4553e6		4883ec18		SUBQ $0x18, SP				
+  assign.go:3		0x4553ea		48896c2410		MOVQ BP, 0x10(SP)			
+  assign.go:3		0x4553ef		488d6c2410		LEAQ 0x10(SP), BP			
+  assign.go:4		0x4553f4		488d0545490000		LEAQ 0x4945(IP), AX			
+  assign.go:4		0x4553fb		0f1f440000		NOPL 0(AX)(AX*1)			
+  assign.go:4		0x455400		e8fb58fbff		CALL runtime.newobject(SB)		
+  assign.go:5		0x455405		48c700d2040000		MOVQ $0x4d2, 0(AX)			
+  assign.go:6		0x45540c		488b6c2410		MOVQ 0x10(SP), BP			
+  assign.go:6		0x455411		4883c418		ADDQ $0x18, SP				
+  assign.go:6		0x455415		c3			RET					
+  assign.go:3		0x455416		e845ceffff		CALL runtime.morestack_noctxt.abi0(SB)	
+  assign.go:3		0x45541b		ebc3			JMP main.assign(SB)
+```
+
+可以发现，此时编译器调用 `runtime.newobject` 在堆上分配内存。如果我们启用内联：
+
+```asm
+//
+// go build assign.go
+// go tool objdump -s "main\.main" assign
+//
+
+TEXT main.main(SB) /root/workspace/gonotes/mm/assign.go
+  assign.go:9		0x4553e0		493b6610		CMPQ 0x10(R14), SP			
+  assign.go:9		0x4553e4		7633			JBE 0x455419				
+  assign.go:9		0x4553e6		4883ec10		SUBQ $0x10, SP				
+  assign.go:9		0x4553ea		48896c2408		MOVQ BP, 0x8(SP)			
+  assign.go:9		0x4553ef		488d6c2408		LEAQ 0x8(SP), BP			
+  assign.go:10		0x4553f4		e8477cfdff		CALL runtime.printlock(SB)		
+  assign.go:10		0x4553f9		b8d2040000		MOVL $0x4d2, AX				
+  assign.go:10		0x4553fe		6690			NOPW					
+  assign.go:10		0x455400		e85b83fdff		CALL runtime.printint(SB)		
+  assign.go:10		0x455405		e8b67efdff		CALL runtime.printnl(SB)		
+  assign.go:10		0x45540a		e8b17cfdff		CALL runtime.printunlock(SB)		
+  assign.go:11		0x45540f		488b6c2408		MOVQ 0x8(SP), BP			
+  assign.go:11		0x455414		4883c410		ADDQ $0x10, SP				
+  assign.go:11		0x455418		c3			RET					
+  assign.go:9		0x455419		e842ceffff		CALL runtime.morestack_noctxt.abi0(SB)	
+  assign.go:9		0x45541e		6690			NOPW					
+  assign.go:9		0x455420		ebbe			JMP main.main(SB)			
+```
+
