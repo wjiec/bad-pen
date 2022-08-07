@@ -204,4 +204,117 @@ func procresize(nprocs int32) *p {
 
 ### 任务
 
- 
+ 编译器会将 `go func(...)`语句翻译成 `runtime.newproc` 调用，如下代码：
+
+```go
+//
+// main.go
+//
+
+//go:noinline
+func Add(a, b int) int {
+	return a + b
+}
+
+func main() {
+	a := 1
+	b := 2
+	go Add(a, b)
+}
+```
+
+我们使用 `go tool compile -S -N -l main.go > main.S` 会得到如下反汇编内容：
+
+```asm
+"".Add STEXT nosplit size=56 args=0x10 locals=0x10 funcid=0x0
+	0x0000 00000 (main.go:4)	TEXT	"".Add(SB), NOSPLIT|ABIInternal, $16-16
+	0x0000 00000 (main.go:4)	SUBQ	$16, SP
+	0x0004 00004 (main.go:4)	MOVQ	BP, 8(SP)
+	0x0009 00009 (main.go:4)	LEAQ	8(SP), BP
+	0x000e 00014 (main.go:4)	MOVQ	AX, "".a+24(SP)
+	0x0013 00019 (main.go:4)	MOVQ	BX, "".b+32(SP)
+	0x0018 00024 (main.go:4)	MOVQ	$0, "".~r2(SP)
+	0x0020 00032 (main.go:5)	MOVQ	"".a+24(SP), AX
+	0x0025 00037 (main.go:5)	ADDQ	"".b+32(SP), AX
+	0x002a 00042 (main.go:5)	MOVQ	AX, "".~r2(SP)
+	0x002e 00046 (main.go:5)	MOVQ	8(SP), BP
+	0x0033 00051 (main.go:5)	ADDQ	$16, SP
+	0x0037 00055 (main.go:5)	RET
+
+
+"".main STEXT size=153 args=0x0 locals=0x40 funcid=0x0
+	0x0000 00000 (main.go:8)	TEXT	"".main(SB), ABIInternal, $64-0
+	0x0000 00000 (main.go:8)	CMPQ	SP, 16(R14)
+	0x0004 00004 (main.go:8)	JLS	143
+	0x000a 00010 (main.go:8)	SUBQ	$64, SP
+	0x000e 00014 (main.go:8)	MOVQ	BP, 56(SP)
+	0x0013 00019 (main.go:8)	LEAQ	56(SP), BP
+	0x0018 00024 (main.go:9)	MOVQ	$1, "".a+24(SP)
+	0x0021 00033 (main.go:10)	MOVQ	$2, "".b+16(SP)
+	0x002a 00042 (main.go:11)	MOVQ	"".a+24(SP), CX
+	0x002f 00047 (main.go:11)	MOVQ	CX, ""..autotmp_2+40(SP)
+	0x0034 00052 (main.go:11)	MOVQ	"".b+16(SP), CX
+	0x0039 00057 (main.go:11)	MOVQ	CX, ""..autotmp_3+32(SP)
+	0x003e 00062 (main.go:11)	LEAQ	type.noalg.struct { F uintptr; ""..autotmp_2 int; ""..autotmp_3 int }(SB), AX
+	0x0045 00069 (main.go:11)	CALL	runtime.newobject(SB)
+	0x004a 00074 (main.go:11)	MOVQ	AX, ""..autotmp_4+48(SP)
+	0x004f 00079 (main.go:11)	LEAQ	"".main·dwrap·1(SB), CX
+	0x0056 00086 (main.go:11)	MOVQ	CX, (AX)
+	0x0059 00089 (main.go:11)	MOVQ	""..autotmp_4+48(SP), CX
+	0x005e 00094 (main.go:11)	TESTB	AL, (CX)
+	0x0060 00096 (main.go:11)	MOVQ	""..autotmp_2+40(SP), DX
+	0x0065 00101 (main.go:11)	MOVQ	DX, 8(CX)
+	0x0069 00105 (main.go:11)	MOVQ	""..autotmp_4+48(SP), CX
+	0x006e 00110 (main.go:11)	TESTB	AL, (CX)
+	0x0070 00112 (main.go:11)	MOVQ	""..autotmp_3+32(SP), DX
+	0x0075 00117 (main.go:11)	MOVQ	DX, 16(CX)
+	0x0079 00121 (main.go:11)	MOVQ	""..autotmp_4+48(SP), BX
+	0x007e 00126 (main.go:11)	XORL	AX, AX
+	0x0080 00128 (main.go:11)	CALL	runtime.newproc(SB) // here
+	0x0085 00133 (main.go:12)	MOVQ	56(SP), BP
+	0x008a 00138 (main.go:12)	ADDQ	$64, SP
+	0x008e 00142 (main.go:12)	RET
+	0x008f 00143 (main.go:12)	NOP
+	0x008f 00143 (main.go:8)	CALL	runtime.morestack_noctxt(SB)
+	0x0094 00148 (main.go:8)	JMP	0
+```
+
+接着来看 `runtime.newproc` 的代码：
+
+```go
+//
+// runtime/proc.go
+//
+
+// Create a new g running fn with siz bytes of arguments.
+// Put it on the queue of g's waiting to run.
+// The compiler turns a go statement into a call to this.
+//
+// The stack layout of this call is unusual: it assumes that the
+// arguments to pass to fn are on the stack sequentially immediately
+// after &fn. Hence, they are logically part of newproc's argument
+// frame, even though they don't appear in its signature (and can't
+// because their types differ between call sites).
+//
+// This must be nosplit because this stack layout means there are
+// untyped arguments in newproc's argument frame. Stack copies won't
+// be able to adjust them and stack splits won't be able to copy them.
+//
+//go:nosplit
+func newproc(siz int32, fn *funcval) {
+	argp := add(unsafe.Pointer(&fn), sys.PtrSize)
+	gp := getg()
+	pc := getcallerpc()
+	systemstack(func() {
+		newg := newproc1(fn, argp, siz, gp, pc)
+
+		_p_ := getg().m.p.ptr()
+		runqput(_p_, newg, true)
+
+		if mainStarted {
+			wakep()
+		}
+	})
+}
+```
+
