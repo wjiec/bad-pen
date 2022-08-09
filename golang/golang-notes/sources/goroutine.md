@@ -226,57 +226,43 @@ func main() {
 我们使用 `go tool compile -S -N -l main.go > main.S` 会得到如下反汇编内容：
 
 ```asm
-"".Add STEXT nosplit size=56 args=0x10 locals=0x10 funcid=0x0
-	0x0000 00000 (main.go:4)	TEXT	"".Add(SB), NOSPLIT|ABIInternal, $16-16
-	0x0000 00000 (main.go:4)	SUBQ	$16, SP
-	0x0004 00004 (main.go:4)	MOVQ	BP, 8(SP)
-	0x0009 00009 (main.go:4)	LEAQ	8(SP), BP
-	0x000e 00014 (main.go:4)	MOVQ	AX, "".a+24(SP)
-	0x0013 00019 (main.go:4)	MOVQ	BX, "".b+32(SP)
-	0x0018 00024 (main.go:4)	MOVQ	$0, "".~r2(SP)
-	0x0020 00032 (main.go:5)	MOVQ	"".a+24(SP), AX
-	0x0025 00037 (main.go:5)	ADDQ	"".b+32(SP), AX
-	0x002a 00042 (main.go:5)	MOVQ	AX, "".~r2(SP)
-	0x002e 00046 (main.go:5)	MOVQ	8(SP), BP
-	0x0033 00051 (main.go:5)	ADDQ	$16, SP
-	0x0037 00055 (main.go:5)	RET
+"".Add STEXT nosplit size=25 args=0x18 locals=0x0 funcid=0x0
+	0x0000 00000 (main.go:4)	TEXT	"".Add(SB), NOSPLIT|ABIInternal, $0-24
+	0x0000 00000 (main.go:4)	MOVQ	$0, "".~r2+24(SP)
+	0x0009 00009 (main.go:5)	MOVQ	"".a+8(SP), AX
+	0x000e 00014 (main.go:5)	ADDQ	"".b+16(SP), AX
+	0x0013 00019 (main.go:5)	MOVQ	AX, "".~r2+24(SP)
+	0x0018 00024 (main.go:5)	RET
 
-
-"".main STEXT size=153 args=0x0 locals=0x40 funcid=0x0
+"".main STEXT size=107 args=0x0 locals=0x40 funcid=0x0
 	0x0000 00000 (main.go:8)	TEXT	"".main(SB), ABIInternal, $64-0
-	0x0000 00000 (main.go:8)	CMPQ	SP, 16(R14)
-	0x0004 00004 (main.go:8)	JLS	143
-	0x000a 00010 (main.go:8)	SUBQ	$64, SP
-	0x000e 00014 (main.go:8)	MOVQ	BP, 56(SP)
-	0x0013 00019 (main.go:8)	LEAQ	56(SP), BP
-	0x0018 00024 (main.go:9)	MOVQ	$1, "".a+24(SP)
-	0x0021 00033 (main.go:10)	MOVQ	$2, "".b+16(SP)
-	0x002a 00042 (main.go:11)	MOVQ	"".a+24(SP), CX
-	0x002f 00047 (main.go:11)	MOVQ	CX, ""..autotmp_2+40(SP)
-	0x0034 00052 (main.go:11)	MOVQ	"".b+16(SP), CX
-	0x0039 00057 (main.go:11)	MOVQ	CX, ""..autotmp_3+32(SP)
-	0x003e 00062 (main.go:11)	LEAQ	type.noalg.struct { F uintptr; ""..autotmp_2 int; ""..autotmp_3 int }(SB), AX
-	0x0045 00069 (main.go:11)	CALL	runtime.newobject(SB)
-	0x004a 00074 (main.go:11)	MOVQ	AX, ""..autotmp_4+48(SP)
-	0x004f 00079 (main.go:11)	LEAQ	"".main·dwrap·1(SB), CX
-	0x0056 00086 (main.go:11)	MOVQ	CX, (AX)
-	0x0059 00089 (main.go:11)	MOVQ	""..autotmp_4+48(SP), CX
-	0x005e 00094 (main.go:11)	TESTB	AL, (CX)
-	0x0060 00096 (main.go:11)	MOVQ	""..autotmp_2+40(SP), DX
-	0x0065 00101 (main.go:11)	MOVQ	DX, 8(CX)
-	0x0069 00105 (main.go:11)	MOVQ	""..autotmp_4+48(SP), CX
-	0x006e 00110 (main.go:11)	TESTB	AL, (CX)
-	0x0070 00112 (main.go:11)	MOVQ	""..autotmp_3+32(SP), DX
-	0x0075 00117 (main.go:11)	MOVQ	DX, 16(CX)
-	0x0079 00121 (main.go:11)	MOVQ	""..autotmp_4+48(SP), BX
-	0x007e 00126 (main.go:11)	XORL	AX, AX
-	0x0080 00128 (main.go:11)	CALL	runtime.newproc(SB) // here
-	0x0085 00133 (main.go:12)	MOVQ	56(SP), BP
-	0x008a 00138 (main.go:12)	ADDQ	$64, SP
-	0x008e 00142 (main.go:12)	RET
-	0x008f 00143 (main.go:12)	NOP
-	0x008f 00143 (main.go:8)	CALL	runtime.morestack_noctxt(SB)
-	0x0094 00148 (main.go:8)	JMP	0
+	0x0000 00000 (main.go:8)	MOVQ	(TLS), CX
+	0x0009 00009 (main.go:8)	CMPQ	SP, 16(CX)
+	0x000d 00013 (main.go:8)	JLS	100
+	
+	0x000f 00015 (main.go:8)	SUBQ	$64, SP
+	0x0013 00019 (main.go:8)	MOVQ	BP, 56(SP)
+	0x0018 00024 (main.go:8)	LEAQ	56(SP), BP
+	
+	0x001d 00029 (main.go:9)	MOVQ	$1, "".a+48(SP) // a = 1
+	0x0026 00038 (main.go:10)	MOVQ	$2, "".b+40(SP) // b = 2
+	0x002f 00047 (main.go:11)	MOVQ	"".a+48(SP), AX // AX = a
+	0x0034 00052 (main.go:11)	MOVL	$24, (SP)		// newproc.siz = 24
+	0x003b 00059 (main.go:11)	LEAQ	"".Add·f(SB), CX // CX = Add
+	0x0042 00066 (main.go:11)	MOVQ	CX, 8(SP)		// fn.fn = CX = Add
+	0x0047 00071 (main.go:11)	MOVQ	AX, 16(SP)		// AX = a = 1
+	0x004c 00076 (main.go:11)	MOVQ	$2, 24(SP)		// 2 => b
+	0x0055 00085 (main.go:11)	CALL	runtime.newproc(SB)
+	0x005a 00090 (main.go:12)	MOVQ	56(SP), BP
+	0x005f 00095 (main.go:12)	ADDQ	$64, SP
+	0x0063 00099 (main.go:12)	RET
+	0x0064 00100 (main.go:12)	NOP
+	0x0064 00100 (main.go:8)	PCDATA	$1, $-1
+	0x0064 00100 (main.go:8)	PCDATA	$0, $-2
+	0x0064 00100 (main.go:8)	CALL	runtime.morestack_noctxt(SB)
+	0x0069 00105 (main.go:8)	PCDATA	$0, $-1
+	0x0069 00105 (main.go:8)	JMP	0
+
 ```
 
 接着来看 `runtime.newproc` 的代码：
@@ -316,5 +302,75 @@ func newproc(siz int32, fn *funcval) {
 		}
 	})
 }
+
+type funcval struct {
+	fn uintptr
+	// variable-size, fn-specific data here
+}
+```
+
+根据汇编代码所示，实际上压入了4个参数，所以实际的调用参数如下：
+
+```go
+func main() {
+    runtime.newproc(24, &funcval{
+        fn: Addr,
+        a = 1,
+        b = 2
+    })
+}
+```
+
+有了参数，就下去就是从栈中获取 `pc` 然后创建对应的 G 结构体。在创建过程中 G 对象默认会复用，除 P 本地的复用链表外，还有全局链表在多个 P 之间共享。在获取到 G 对象之后，`newproc1` 会进行一系列的初始化操作（不管是新建的还是复用的），同时相关执行参数也会被拷贝到 G 的栈空间。创建完成的 G 会被邮箱放入 P 本地队列等待执行（无锁操作）。
+
+
+
+### 线程
+
+当 `newproc1` 成功创建 G 之后，会尝试用 `wakep` 唤醒 M 执行任务。M 最特别的是自带一个名为 g0 栈大小为 8K 的一个 G 对象，这是为了在暂停用户 G 时，如果不更改执行栈，可能会造成多个线程共享内存，从而引发混乱。同时在执行垃圾回收时，也需要根据这个来收缩被线程持有的 G 栈空间。因此，当需要执行管理指令时，会将线程栈临时切换到 g0 上，与用户逻辑彻底隔离（这也就是源码中经常见到的 `systemstack` 方法所做的，它会切换到 g0 后再执行运行时的管理工作）。
+
+```asm
+// func systemstack(fn func())
+TEXT runtime·systemstack(SB), NOSPLIT, $0-8
+	MOVQ	fn+0(FP), DI	// DI = fn
+	get_tls(CX)
+	MOVQ	g(CX), AX	// AX = g
+	MOVQ	g_m(AX), BX	// BX = m
+
+	CMPQ	AX, m_gsignal(BX)
+	JEQ	noswitch
+
+	MOVQ	m_g0(BX), DX	// DX = g0
+	CMPQ	AX, DX
+	JEQ	noswitch
+
+	CMPQ	AX, m_curg(BX)
+	JNE	bad
+
+	// switch stacks
+	// save our state in g->sched. Pretend to
+	// be systemstack_switch if the G stack is scanned.
+	CALL	gosave_systemstack_switch<>(SB)
+
+	// switch to g0
+	MOVQ	DX, g(CX)
+	MOVQ	DX, R14 // set the g register
+	MOVQ	(g_sched+gobuf_sp)(DX), BX
+	MOVQ	BX, SP
+
+	// call target function
+	MOVQ	DI, DX
+	MOVQ	0(DI), DI
+	CALL	DI
+
+	// switch back to g
+	get_tls(CX)
+	MOVQ	g(CX), AX
+	MOVQ	g_m(AX), BX
+	MOVQ	m_curg(BX), AX
+	MOVQ	AX, g(CX)
+	MOVQ	(g_sched+gobuf_sp)(AX), SP
+	MOVQ	$0, (g_sched+gobuf_sp)(AX)
+	RET
 ```
 
