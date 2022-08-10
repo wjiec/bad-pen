@@ -374,3 +374,15 @@ TEXT runtime·systemstack(SB), NOSPLIT, $0-8
 	RET
 ```
 
+
+
+### 执行
+
+M 执行 G 并发任务有两个起点：线程启动函数 `mstart` 和 `stopm` 休眠唤醒后再度恢复调度循环。准备进入工作状态的 M 必须绑定一个有效 P（为 M 提供 cache，以便于为工作线程提供对象内存分配）。
+
+当一切就绪之后，M 进入核心调度循环，一个由 `schedule`、`execute`、`goroutine fn`、`goexit` 函数组成的逻辑循环。就算 M 在休眠唤醒后，也只是从断点处恢复。
+
+
+
+### 连续栈
+
