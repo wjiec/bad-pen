@@ -684,3 +684,36 @@ func entersyscall_sysmon() {
 }
 ```
 
+
+
+### 监控
+
+系统监控现场 sysmon 主要做以下几件事：
+
+* 释放闲置时间超过 5 分钟的 span 物理内存
+* 如果超过2分钟没有垃圾回收，则强制执行
+* 将长时间未处理的 netpoll 结果添加到任务队列
+* 向长时间运行的 G 任务发出抢占调度
+* 收回因 syscall 而长时间阻塞的 P
+
+
+
+### 其他
+
+#### runtime.Gosched
+
+用户可调用 `runtime.Gosched` 将当前 G 任务暂停，将其重新放回到全局队列中，让出当前 M 去执行其他任务。
+
+#### gopark & goready
+
+gopark 与 Gosched 最大的区别在于，gopark不会将 G 放回到待运行队列中，必须主动恢复，否则该任务会遗失。与之配套的是 goready，该方法会将 G 放回优先级最高的 P.runnext
+
+#### Goexit
+
+用户可调用 `runtime.Goexit` 立即终止 G 任务，不管当前处于调用堆栈的哪个层次。在终止前，它确保所有的 G.defer 被执行
+
+>而通过执行 `os.Exit(1)` 则不会执行 defer 语句
+
+#### stopTheWorld
+
+用户逻辑必须暂停在一个安全点上，否则会引发很多意外问题。因此，stopTheWorld 同样是通过“通知”机制，让 G 主动停止（比如设置 gcwaiting = 1 让调度器函数 schedule 主动休眠 M；或者向所有正在运行的 G 任务发出抢占调度，使其停止）
