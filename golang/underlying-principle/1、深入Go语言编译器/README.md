@@ -202,3 +202,153 @@ SSA 生成阶段是编译器进行后续优化的保证，比如常量传播（C
 #### 机器码生成 —— 汇编器
 
 在 SSA 阶段，编译器先执行与特定指令集无关的优化，再执行与特定指令集有关的优化，并最终生成与特定指令集有关的指令和寄存器分配方式。在 SSA 后，编译器将调用与特定指令集有关的汇编器（Assembler）生成 obj 文件，而 obj 文件将被作为链接器（Linker）的输入，生成二进制可执行文件。汇编与链接的核心逻辑位于 internal/obj 目录中。
+
+
+
+#### 机器码生成 —— 链接
+
+链接就是将编写的程序与外部程序组合在一起的过程。链接分为静态链接和动态链接，静态链接的特点是链接器会将程序中使用的所有库程序复制到最后的可可执行文件中，而动态链接只会在最后的可执行文件中存储动态链接库的位置，并在运行时调用。因此静态链接更快，并且可移植，它不需要运行它的系统上存在该库，但是它会占用更多的磁盘和内存空间。
+Go 代码在默认情况下是使用静态链接的，但是在一些特殊情况下，如在使用了 CGO 时，则会使用操作系统的动态链接库。我们可以通过在 go build 编译时指定 buildmode 参数来选择链接形式。
+
+我们可以在 go build 中使用 -x 参数打印详细的编译过程。
+
+
+
+#### ELF 文件解析
+
+ELF（Executabl and Linkable Format）是类 UNIX 操作系统下最常见的可执行且可链接的文件格式。除机器码外，在可执行文件中还可能包含调试信息、动态链接库信息、符号表信息等。我们可以通过 `readelf -h <exe>` 查看 ELF 文件的头信息：
+
+```bash
+$ readelf -h main
+ELF Header:
+  Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              EXEC (Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Version:                           0x1
+  Entry point address:               0x463690
+  Start of program headers:          64 (bytes into file)
+  Start of section headers:          456 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         7
+  Size of section headers:           64 (bytes)
+  Number of section headers:         25
+  Section header string table index: 3
+```
+
+也可以通过 readelf 工具查看 EL 文件中的 section 的信息：
+
+```bash
+$ radelf -S main
+There are 25 section headers, starting at offset 0x1c8:
+
+Section Headers:
+  [Nr] Name              Type             Address           Offset
+       Size              EntSize          Flags  Link  Info  Align
+  [ 0]                   NULL             0000000000000000  00000000
+       0000000000000000  0000000000000000           0     0     0
+  [ 1] .text             PROGBITS         0000000000401000  00001000
+       00000000002e7cc4  0000000000000000  AX       0     0     16
+  [ 2] .rodata           PROGBITS         00000000006e9000  002e9000
+       0000000000148920  0000000000000000   A       0     0     32
+  [ 3] .shstrtab         STRTAB           0000000000000000  00431920
+       00000000000001bc  0000000000000000           0     0     1
+  [ 4] .typelink         PROGBITS         0000000000831ae0  00431ae0
+       0000000000002368  0000000000000000   A       0     0     32
+  [ 5] .itablink         PROGBITS         0000000000833e48  00433e48
+       0000000000000b58  0000000000000000   A       0     0     8
+  [ 6] .gosymtab         PROGBITS         00000000008349a0  004349a0
+       0000000000000000  0000000000000000   A       0     0     1
+  [ 7] .gopclntab        PROGBITS         00000000008349a0  004349a0
+       00000000001db3a3  0000000000000000   A       0     0     32
+  [ 8] .go.buildinfo     PROGBITS         0000000000a10000  00610000
+       0000000000000020  0000000000000000  WA       0     0     16
+  [ 9] .noptrdata        PROGBITS         0000000000a10020  00610020
+       0000000000037840  0000000000000000  WA       0     0     32
+  [10] .data             PROGBITS         0000000000a47860  00647860
+       000000000000ad50  0000000000000000  WA       0     0     32
+  [11] .bss              NOBITS           0000000000a525c0  006525c0
+       000000000002c670  0000000000000000  WA       0     0     32
+  [12] .noptrbss         NOBITS           0000000000a7ec40  0067ec40
+       00000000000034e8  0000000000000000  WA       0     0     32
+  [13] .zdebug_abbrev    PROGBITS         0000000000a83000  00653000
+       0000000000000119  0000000000000000           0     0     8
+  [14] .zdebug_line      PROGBITS         0000000000a83119  00653119
+       000000000006b413  0000000000000000           0     0     8
+  [15] .zdebug_frame     PROGBITS         0000000000aee52c  006be52c
+       0000000000018b68  0000000000000000           0     0     8
+  [16] .zdebug_pubnames  PROGBITS         0000000000b07094  006d7094
+       0000000000003a0a  0000000000000000           0     0     8
+  [17] .zdebug_pubtypes  PROGBITS         0000000000b0aa9e  006daa9e
+       000000000000ba7c  0000000000000000           0     0     8
+  [18] .debug_gdb_script PROGBITS         0000000000b1651a  006e651a
+       0000000000000026  0000000000000000           0     0     1
+  [19] .zdebug_info      PROGBITS         0000000000b16540  006e6540
+       00000000000a5dce  0000000000000000           0     0     8
+  [20] .zdebug_loc       PROGBITS         0000000000bbc30e  0078c30e
+       000000000006db20  0000000000000000           0     0     8
+  [21] .zdebug_ranges    PROGBITS         0000000000c29e2e  007f9e2e
+       0000000000026244  0000000000000000           0     0     8
+  [22] .note.go.buildid  NOTE             0000000000400f9c  00000f9c
+       0000000000000064  0000000000000000   A       0     0     4
+  [23] .symtab           SYMTAB           0000000000000000  00821000
+       0000000000035b08  0000000000000018          24   274     8
+  [24] .strtab           STRTAB           0000000000000000  00856b08
+       000000000004aa5a  0000000000000000           0     0     1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  l (large), p (processor specific)
+```
+
+也可以通过 `debug/elf` 包来获取 ELF 文件中的一些信息。最后我们可以从 ELF 中读取 segment 信息，它描述程序如何映射到内存中，如哪些 section 需要导入内存、采取只读模式还是读写模式、内存对其大小等：
+
+```bash
+$ readelf -lW main
+Elf file type is EXEC (Executable file)
+Entry point 0x463690
+There are 7 program headers, starting at offset 64
+
+Program Headers:
+  Type           Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
+  PHDR           0x000040 0x0000000000400040 0x0000000000400040 0x000188 0x000188 R   0x1000
+  NOTE           0x000f9c 0x0000000000400f9c 0x0000000000400f9c 0x000064 0x000064 R   0x4
+  LOAD           0x000000 0x0000000000400000 0x0000000000400000 0x2e8cc4 0x2e8cc4 R E 0x1000
+  LOAD           0x2e9000 0x00000000006e9000 0x00000000006e9000 0x326d43 0x326d43 R   0x1000
+  LOAD           0x610000 0x0000000000a10000 0x0000000000a10000 0x0425c0 0x072128 RW  0x1000
+  GNU_STACK      0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x000000 RW  0x8
+  LOOS+0x5041580 0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x000000     0x8
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     
+   01     .note.go.buildid 
+   02     .text .note.go.buildid 
+   03     .rodata .typelink .itablink .gosymtab .gopclntab 
+   04     .go.buildinfo .noptrdata .data .bss .noptrbss 
+   05     
+   06
+```
+
+例如，我们可以通过 objdump 可以导出 .note.go.buildid 段中的信息，其中包含 Go 程序唯一的 ID。
+
+```bash
+$ objdump -s -j .go.buildinfo main
+main:     file format elf64-x86-64
+
+Contents of section .note.go.buildid:
+ 400f9c 04000000 53000000 04000000 476f0000  ....S.......Go..
+ 400fac 744d7445 7a77334f 2d747164 30787774  tMtEzw3O-tqd0xwt
+ 400fbc 57686478 2f667130 4148586e 68344f7a  Whdx/fq0AHXnh4Oz
+ 400fcc 6a6c4845 786d6b4e 632f7146 7735644d  jlHExmkNc/qFw5dM
+ 400fdc 54324549 4e33336b 4f2d7973 5f6c2f76  T2EIN33kO-ys_l/v
+ 400fec 76623171 6e56594a 636c3951 36437339  vb1qnVYJcl9Q6Cs9
+ 400ffc 68387900                             h8y.
+```
