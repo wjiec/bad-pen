@@ -264,3 +264,6 @@ func tcIndex(n *ir.IndexExpr) ir.Node {
 ```
 
 Go 语言运行时在发现数组、切片和字符串的越界操作时，会由运行时的 panicIndex 和 runtime.goPanicIndex 函数触发程序的运行时错误并导致崩溃。
+
+
+
