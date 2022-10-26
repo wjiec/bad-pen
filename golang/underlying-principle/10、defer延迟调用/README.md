@@ -284,3 +284,162 @@ func newdefer(siz int32) *_defer {
 ```
 
 当 defer 执行完毕被销毁后，会重新回到局部缓存池中，当局部缓存池容纳了足够的对象时，会将 _defer 结构体放入全局缓存池。存储在全局和局部缓存池中的对象如果没有被使用，则最终在垃圾回收阶段被销毁。
+
+
+
+#### deferreturn 调用
+
+在函数正常结束时，其递归调用了 runtime.deferreturn 函数，在该函数中会遍历 defer 链表，并调用存储在 defer 中的函数。
+
+```go
+// Run a deferred function if there is one.
+// The compiler inserts a call to this at the end of any
+// function which calls defer.
+// If there is a deferred function, this will call runtime·jmpdefer,
+// which will jump to the deferred function such that it appears
+// to have been called by the caller of deferreturn at the point
+// just before deferreturn was called. The effect is that deferreturn
+// is called again and again until there are no more deferred functions.
+//
+// Declared as nosplit, because the function should not be preempted once we start
+// modifying the caller's frame in order to reuse the frame to call the deferred
+// function.
+//
+//go:nosplit
+func deferreturn() {
+	gp := getg()
+	d := gp._defer
+	if d == nil {
+		return
+	}
+	sp := getcallersp()
+	if d.sp != sp {
+		return
+	}
+	if d.openDefer {
+		done := runOpenDeferFrame(gp, d)
+		if !done {
+			throw("unfinished open-coded defers in deferreturn")
+		}
+		gp._defer = d.link
+		freedefer(d)
+		return
+	}
+
+	// Moving arguments around.
+	//
+	// Everything called after this point must be recursively
+	// nosplit because the garbage collector won't know the form
+	// of the arguments until the jmpdefer can flip the PC over to
+	// fn.
+	argp := getcallersp() + sys.MinFrameSize
+	switch d.siz {
+	case 0:
+		// Do nothing.
+	case sys.PtrSize:
+		*(*uintptr)(unsafe.Pointer(argp)) = *(*uintptr)(deferArgs(d))
+	default:
+		memmove(unsafe.Pointer(argp), deferArgs(d), uintptr(d.siz))
+	}
+	fn := d.fn
+	d.fn = nil
+	gp._defer = d.link
+	freedefer(d)
+	// If the defer function pointer is nil, force the seg fault to happen
+	// here rather than in jmpdefer. gentraceback() throws an error if it is
+	// called with a callback on an LR architecture and jmpdefer is on the
+	// stack, because the stack trace can be incorrect in that case - see
+	// issue #8153).
+	_ = fn.fn
+	jmpdefer(fn, argp)
+}
+```
+
+deferreturn 函数会检查当前函数的 sp 寄存器地址，如果 sp 寄存器不同，则说明不是当前函数的 defer 调用了，需要退出。当 deferreturn 获取需要执行的函数之后，需要将当前 defer 函数的参数重新转移到栈中，调用 freedefer 销毁当前的结构体，并将链表指向下一个 defer 结构体。最终通过 jmpdefer 函数完成调用：
+
+```go
+// func jmpdefer(fv *funcval, argp uintptr)
+// argp is a caller SP.
+// called from deferreturn.
+// 1. pop the caller
+// 2. sub 5 bytes from the callers return
+// 3. jmp to the argument
+TEXT runtime·jmpdefer(SB), NOSPLIT, $0-16
+	MOVQ	fv+0(FP), DX	// fn
+	MOVQ	argp+8(FP), BX	// caller sp
+	LEAQ	-8(BX), SP	// caller sp after CALL
+	MOVQ	-8(SP), BP	// restore BP as if deferreturn returned (harmless if framepointers not in use)
+	SUBQ	$5, (SP)	// return to CALL again
+	MOVQ	0(DX), BX
+	JMP	BX	// but first run the deferred function
+```
+
+jmpdefer 函数使用了比较巧妙的方式实现了对 deferreturn 函数的反复调用。其核心思想是调整了 deferreturn 函数的 SP、BP 地址，使 deferreturn 函数退出之后再次调用 deferreturn 函数，从而实现循环调用。
+
+**由于 jmpdefer 函数在执行完毕返回时可以递归调用 deferreturn 函数，复用了栈空间，所以不会因为大量调用导致栈溢出。**
+
+
+
+#### Go 1.13 栈分配优化
+
+Go 1.13 为了解决堆分配的效率问题，对于最多调用一次的 defer 语义采用了在栈中分配的策略。当执行到 defer 语句时，调用都会变为执行运行时的 runtime.deferprocStack 函数。在函数的最后，和堆分配一样，仍然插入了 runtime.deferreturn 函数用于遍历调用链：
+
+```go
+// deferprocStack queues a new deferred function with a defer record on the stack.
+// The defer record must have its siz and fn fields initialized.
+// All other fields can contain junk.
+// The defer record must be immediately followed in memory by
+// the arguments of the defer.
+// Nosplit because the arguments on the stack won't be scanned
+// until the defer record is spliced into the gp._defer list.
+//go:nosplit
+func deferprocStack(d *_defer) {
+	gp := getg()
+	if gp.m.curg != gp {
+		// go code on the system stack can't defer
+		throw("defer on system stack")
+	}
+	if goexperiment.RegabiDefer && d.siz != 0 {
+		throw("defer with non-empty frame")
+	}
+	// siz and fn are already set.
+	// The other fields are junk on entry to deferprocStack and
+	// are initialized here.
+	d.started = false
+	d.heap = false
+	d.openDefer = false
+	d.sp = getcallersp()
+	d.pc = getcallerpc()
+	d.framepc = 0
+	d.varp = 0
+	// The lines below implement:
+	//   d.panic = nil
+	//   d.fd = nil
+	//   d.link = gp._defer
+	//   gp._defer = d
+	// But without write barriers. The first three are writes to
+	// the stack so they don't need a write barrier, and furthermore
+	// are to uninitialized memory, so they must not use a write barrier.
+	// The fourth write does not require a write barrier because we
+	// explicitly mark all the defer structures, so we don't need to
+	// keep track of pointers to them with a write barrier.
+	*(*uintptr)(unsafe.Pointer(&d._panic)) = 0
+	*(*uintptr)(unsafe.Pointer(&d.fd)) = 0
+	*(*uintptr)(unsafe.Pointer(&d.link)) = uintptr(unsafe.Pointer(gp._defer))
+	*(*uintptr)(unsafe.Pointer(&gp._defer)) = uintptr(unsafe.Pointer(d))
+
+	return0()
+	// No code can go here - the C return register has
+	// been set and must not be clobbered.
+}
+```
+
+该函数传递了一个 _defer 指针，该 _defer 其实已经放置在栈中了。并在执行前将 defer 的大小、参数、哈数指针放置在了栈中，在 deferprocStack 中只需要获取必要的调用者 SP、PC 指针并将 _defer 压入链表的头部。
+
+
+
+#### Go 1.14 内联优化
+
+虽然 Go 1.13 中 defer 的栈策略已经有比较大的优化，但是与直接的函数调用相比还是有很大差距。一种容易想到的优化策略是在编译时在函数结束前直接调用 defer 函数。这样还可以省去放置到 _defer 链表和遍历的时间。
+
+采用这种方式最大的困难在于 defer 函数并不一定能够执行（条件选择的 defer 函数）。为了解决这个的问题，Go 语言编译器采取了一种巧妙的方式。通过在栈中初始化 1 字节的临时变量，以位图的形式来判断函数是否需要执行。
