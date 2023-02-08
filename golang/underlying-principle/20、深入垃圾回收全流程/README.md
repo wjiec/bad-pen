@@ -125,3 +125,47 @@ func (c *gcControllerState) startCycle(markStartTime int64, procs int, trigger g
 
 ### 垃圾清扫
 
+在标记结束之后会进入垃圾清扫阶段，将垃圾对象的内存回收重用或返还给操作系统。在清扫阶段会调用 gcSweep 函数，该函数会将 sweep.g 清扫协程的状态变为 running，在结束 STW 阶段并开始重新调度循环时优先调度清扫协程。
+
+#### 懒清扫逻辑
+
+清扫是以 span 为单位进行的，sweepone 函数的作用是找到一个 span 并进行相应的清扫工作。需要清扫的 span 队列是一个长度为 2 的队列，每次都将互换切换着进行清扫。
+
+#### 辅助清扫
+
+辅助清扫即工作协程必须在适当的时机执行辅助清扫工作，以避免下一次 GC 发生时还有大量的未清扫 span。
+
+
+
+### 系统驻留内存清除
+
+为了将系统分配的内存保持在适当的大小，同时回收不再被使用的内存，Go 语言使用了单独的后台清扫协程来清除内存。
+
+```go
+// gcenable is called after the bulk of the runtime initialization,
+// just before we're about to start letting user code run.
+// It kicks off the background sweeper goroutine, the background
+// scavenger goroutine, and enables GC.
+func gcenable() {
+	// Kick off sweeping and scavenging.
+	c := make(chan int, 2)
+	go bgsweep(c)
+	go bgscavenge(c)
+	<-c
+	<-c
+	memstats.enablegc = true // now that runtime is initialized, GC is okay
+}
+```
+
+
+
+### 通过 trace 工具来检查垃圾回收产生的性能问题
+
+我们可以通过 trace 工具来分析内存在某段时间内的增长情况：
+
+```shell
+curl -o trace.out http://localhost:8088/debug/pprof/trace?seconds=30
+
+go tool trace trace.out
+```
+
