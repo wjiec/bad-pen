@@ -55,3 +55,90 @@ Go 语言的编译器在逻辑上可以分成 4 个步骤：词法分析与语�
 #### 机器码生成
 
 Go 语言源代码的 `src/cmd/compile/internal` 目录中包含了很多机器码生成相关的包，不同类型的 CPU 使用了不同的包生成机器码。
+
+#### 编译流程
+
+Go 语言的编译从 `src/cmd/compile/main.go` 文件开始，然后进入到 `src/cmd/compile/internal/gc.Main` 函数中，随后会调用 `cmd/compile/internal/noder/noder.LoadPackage` 方法对输入文件进行词法分析与语法分析，得到对应的抽象语法树。
+
+
+
+### 词法分析和语法分析
+
+该过程将原本机器认为无序的源文件转换成更容易理解、分析并且结构化的抽象语法树。
+
+#### 词法分析
+
+为了让机器能够理解源代码，需要做的第一件事就是将字符串分组，这个过程被称为词法分析（Lexical analysis），这是将字符串序列转换为 Token 序列的过程。
+
+词法分析作为具有固定模式的任务，就有了 lex 这种专门用于生成词法分析器的工具。我们可以通过以下内容生成一个简易的 Go 词法分析器：
+
+```lex
+%{
+#include <stdio.h>
+%}
+
+%%
+package         printf("PACKAGE ");
+import          printf("IMPORT ");
+\.              printf("DOT ");
+\{              printf("L_BRACE ");
+\}              printf("R_BRACE ");
+\(              printf("L_PAREN ");
+\)              printf("R_PAREN ");
+\"              printf("QUOTE ");
+\n              printf("\n");
+[0-9]+          printf("NUMBER ");
+[a-zA-Z_]+      printf("IDENT ");
+%%
+```
+
+然后我们在终端中执行 `lex go.l` 将其展开为 C 语言代码，并通过命令 `gcc lex.yy.c -o lexier -ll` 将其编译为二进制文件。我们将下面的 Go 代码作为输入传递给词法分析器：
+
+```go
+package main
+ 
+import (
+    "fmt"
+)
+
+func main() {
+    fmt.Println("Hello world!")
+}
+```
+
+执行命令：`cat main.go | lexier` 可以看到输出如下所示：
+
+```plaintext
+PACKAGE  IDENT 
+
+IMPORT  L_PAREN 
+    QUOTE IDENT QUOTE 
+R_PAREN 
+
+IDENT  IDENT L_PAREN R_PAREN  L_BRACE 
+    IDENT DOT IDENT L_PAREN QUOTE IDENT  IDENT !QUOTE R_PAREN 
+R_BRACE
+```
+
+#### Go 语言中的词法分析
+
+Go 语言的词法分析是通过 `src/cmd/compile/internal/syntax/scanner.scanner` 结构体实现的，这个结构体会持有当前扫描的数据源文件、启用的模式和当前被扫描到 Token：
+
+```go
+type scanner struct {
+	source
+	mode   uint
+	nlsemi bool // if set '\n' and EOF translate to ';'
+
+	// current token, valid after calling next()
+	line, col uint
+	blank     bool // line is blank up to col
+	tok       token
+	lit       string   // valid if tok is _Name, _Literal, or _Semi ("semicolon", "newline", or "EOF"); may be malformed if bad is true
+	bad       bool     // valid if tok is _Literal, true if a syntax error occurred, lit may be malformed
+	kind      LitKind  // valid if tok is _Literal
+	op        Operator // valid if tok is _Operator, _Star, _AssignOp, or _IncOp
+	prec      int      // valid if tok is _Operator, _Star, _AssignOp, or _IncOp
+}
+```
+
