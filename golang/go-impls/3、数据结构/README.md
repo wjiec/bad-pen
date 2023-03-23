@@ -78,5 +78,20 @@ func anylit(n ir.Node, var_ ir.Node, init *ir.Nodes) {
 }
 ```
 
+#### 访问与赋值
 
+Go 语言中可以通过编译期间的静态类型检查判断数组是否越界。Go 语言对数组的访问有比较多的检查，它不仅会在编译期间提前发现一些简单的越界错误并插入用于检测数组上限的函数调用，还会在运行期间通过插入的函数保证不会发生越界。
+
+```go
+//
+// GOSSAFUNC=ArrayBoundCheck go build array.go
+//
+
+func ArrayBoundCheck() int {
+	var arr [3]int
+	i := 4
+	v := arr[i]
+	return v
+}
+```
 
