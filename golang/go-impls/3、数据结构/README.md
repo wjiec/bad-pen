@@ -1,3 +1,82 @@
 数据结构
 -------------
 
+数据结构和算法是程序中最重要的两个组成部分。
+
+
+
+### 数组
+
+数组是一种数据结构，时相同类型元素的集合。计算机会为数组分配一块连续的内存来保存其中的元素。在 Go 中，我们通常会从两个维度来描述数组——数组中存储的元素类型和数组最多能存储的元素个数。
+
+Go 语言的数组在初始化之后大小就无法改变，且类型元素相同但大小不同的数组类型在 Go 中是完全不同的。
+
+
+
+#### 初始化
+
+Go 语言的数组有两种创建方式，一种是显式指定数组大小，一种是使用 `[...]Type` 让编译器在编译时自动计算大小：
+
+```go
+var arr1 [3]int
+var arr2 [...]int{1,2,3}
+```
+
+当我们使用 `[...]T` 创建数组时，编译器会在 `cmd/compile/internal/gc.typecheckcomplit` 函数中推推导数组的大小。
+
+#### 语句转换
+
+编译器会根据元素数量的不同分别做对应的优化：
+
+* 当元素少于或等于 4 个时，会直接将数组中的元素放置到栈上
+* 当元素多于 4 个时，会将数组中的元素放置到静态区并在运行时取出
+
+```go
+//
+// src/cmd/compile/internal/walk/complit.go
+//
+func anylit(n ir.Node, var_ ir.Node, init *ir.Nodes) {
+	t := n.Type()
+	switch n.Op() {
+	case ir.OARRAYLIT:
+		n := n.(*ir.CompLitExpr)
+		if !t.IsStruct() && !t.IsArray() {
+			base.Fatalf("anylit: not struct/array")
+		}
+
+		if isSimpleName(var_) && len(n.List) > 4 {
+			// lay out static data
+			vstat := readonlystaticname(t)
+
+			ctxt := inInitFunction
+			if n.Op() == ir.OARRAYLIT {
+				ctxt = inNonInitFunction
+			}
+			fixedlit(ctxt, initKindStatic, n, vstat, init)
+
+			// copy static to var
+			appendWalkStmt(init, ir.NewAssignStmt(base.Pos, var_, vstat))
+
+			// add expressions to automatic
+			fixedlit(inInitFunction, initKindDynamic, n, var_, init)
+			break
+		}
+
+		var components int64
+		if n.Op() == ir.OARRAYLIT {
+			components = t.NumElem()
+		} else {
+			components = int64(t.NumFields())
+		}
+		// initialization of an array or struct with unspecified components (missing fields or arrays)
+		if isSimpleName(var_) || int64(len(n.List)) < components {
+			appendWalkStmt(init, ir.NewAssignStmt(base.Pos, var_, nil))
+		}
+
+		fixedlit(inInitFunction, initKindLocalCode, n, var_, init)
+	}
+}
+```
+
+
+
