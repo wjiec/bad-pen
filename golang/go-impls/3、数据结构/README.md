@@ -95,3 +95,53 @@ func ArrayBoundCheck() int {
 }
 ```
 
+
+
+### 切片
+
+在日常开发中，更常用的数据结构是切片，即动态数组，其长度不固定，我们可以向切片中追加元素，它会在容量不足时自动扩容。
+
+#### 数据结构
+
+在编译期间切片的时 `cmd/compile/internal/types.Slice` 类型，但是在运行时切片可以由 `reflect.SliceHeader` 结构体表示。
+
+```go
+//
+// src/reflect/value.go
+//
+
+// SliceHeader is the runtime representation of a slice.
+// It cannot be used safely or portably and its representation may
+// change in a later release.
+// Moreover, the Data field is not sufficient to guarantee the data
+// it references will not be garbage collected, so programs must keep
+// a separate, correctly typed pointer to the underlying data.
+//
+// In new code, use unsafe.Slice or unsafe.SliceData instead.
+type SliceHeader struct {
+	Data uintptr
+	Len  int
+	Cap  int
+}
+```
+
+我们可以将切片理解成一块连续的内存空间加上长度与容量的标识。
+
+#### 初始化
+
+切片的初始化有三种形式：
+
+* 使用下标在数组或切片之前创建：不会复制底层数组，只是对原有数据结构的一个「视图」
+* 字面量形式创建：在编译期会展开为创建在数组之上的一个「视图」
+* 使用 make 关键字创建：如果切片发生逃逸或者非常大，则会在运行时通过 `runtime.makeslice` 来创建。否则会直接回滚到字面量的形式在编译期间创建。
+
+#### 追加和扩容
+
+使用 append 关键字向切片中追加元素也是常见的切片操作。当切片容量不足时，运行时会调用 `runtime.growslice` 函数为切片扩容。
+
+
+
+### 哈希表
+
+
+
