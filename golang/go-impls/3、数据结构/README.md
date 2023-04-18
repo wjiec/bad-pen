@@ -143,5 +143,97 @@ type SliceHeader struct {
 
 ### 哈希表
 
+设计哈希表的关键点——哈希函数和冲突解决方法。其中，哈希函数在很大程度上能够决定哈希表的读写性能。而哈希冲突问题无法避免，常见的方法是开放地址法和拉链法。
+
+* 开放地址法：如果发生了冲突，则会将键值对写入下一个索引不为空的位置
+* 拉链法：拉链法会使用链表数组作为哈希底层的数据结构，我们可以将它看成会扩展的二维数组。
+
+#### 数据结构
+
+Go 语言运行时同时使用多个数据结构组合来表示哈希表，其中 `runtime.hmap` 是最核心的结构体：
+
+```go
+//
+// runtime/map.go
+//
+
+// A header for a Go map.
+type hmap struct {
+	// Note: the format of the hmap is also encoded in cmd/compile/internal/reflectdata/reflect.go.
+	// Make sure this stays in sync with the compiler's definition.
+	count     int // # live cells == size of map.  Must be first (used by len() builtin)
+	flags     uint8
+	B         uint8  // log_2 of # of buckets (can hold up to loadFactor * 2^B items)
+	noverflow uint16 // approximate number of overflow buckets; see incrnoverflow for details
+	hash0     uint32 // hash seed
+
+	buckets    unsafe.Pointer // array of 2^B Buckets. may be nil if count==0.
+	oldbuckets unsafe.Pointer // previous bucket array of half the size, non-nil only when growing
+	nevacuate  uintptr        // progress counter for evacuation (buckets less than this have been evacuated)
+
+	extra *mapextra // optional fields
+}
+
+// mapextra holds fields that are not present on all maps.
+type mapextra struct {
+	// If both key and elem do not contain pointers and are inline, then we mark bucket
+	// type as containing no pointers. This avoids scanning such maps.
+	// However, bmap.overflow is a pointer. In order to keep overflow buckets
+	// alive, we store pointers to all overflow buckets in hmap.extra.overflow and hmap.extra.oldoverflow.
+	// overflow and oldoverflow are only used if key and elem do not contain pointers.
+	// overflow contains overflow buckets for hmap.buckets.
+	// oldoverflow contains overflow buckets for hmap.oldbuckets.
+	// The indirection allows to store a pointer to the slice in hiter.
+	overflow    *[]*bmap
+	oldoverflow *[]*bmap
+
+	// nextOverflow holds a pointer to a free overflow bucket.
+	nextOverflow *bmap
+}
+
+// A bucket for a Go map.
+type bmap struct {
+	// tophash generally contains the top byte of the hash value
+	// for each key in this bucket. If tophash[0] < minTopHash,
+	// tophash[0] is a bucket evacuation state instead.
+	tophash [bucketCnt]uint8
+	// Followed by bucketCnt keys and then bucketCnt elems.
+	// NOTE: packing all the keys together and then all the elems together makes the
+	// code a bit more complicated than alternating key/elem/key/elem/... but it allows
+	// us to eliminate padding which would be needed for, e.g., map[int64]int8.
+	// Followed by an overflow pointer.
+}
+```
+
+其中 `runtime.bmap` 就是所谓的「桶」，每一个桶可以存储 8 个键值对。溢出桶是 Go 语言还使用 C 语言实现时的设计，由于它能降低扩容频率而沿用至今。
+
+`runtime.bmap` 中的其他字段在运行时也都是通过计算内存地址的方式进行访问的。所以它的定义中不包含这些字段，不过我们可以根据编译期间的 `cmd/compile/internal/reflectdata/reflect.MapBucketType` 函数获得完整的结构：
+
+```go
+type bmap struct {
+  // field = append(field, makefield("topbits", arr))
+  topbits [8]uint8
+  
+  // keys := makefield("keys", arr)
+  keys [8]keytype
+  
+  // elems := makefield("elems", arr)
+  elems [8]elemtype
+  
+  // overflow := makefield("overflow", otyp)
+  overflow uintptr
+}
+```
+
+#### 初始化
+
+哈希表的初始化支持使用字面量或者通过运行时 `make` 的方式进行。
+
+* 字面量形式：当哈希表的元素数量小于等于 25 个时，编译器会将字面量初始化的结构体转换为逐个加入哈希表的形式。超过 25 个时，将会创建两个数组分别存储键和值，这些键值对会通过循环加入哈希表
+* 运行时：如果哈希表在栈上切元素数量小于 8 个时，将会使用小容量的哈希表优化创建。否则都会使用 `runtime.makemap` 来创建。
+  * 当桶的数量小于 2 ^ 4 （16）时将不会创建溢出桶，否则会创建 2 ^ (B - 4) 个溢出桶。
+
+#### 读写操作
+
 
 
