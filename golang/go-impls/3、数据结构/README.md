@@ -235,5 +235,29 @@ type bmap struct {
 
 #### 读写操作
 
+在编译的类型检查期间，`map[key]` 以及类似的读取操作都会被转换成哈希表的 `OINDEXMAP` 操作，中间代码生成阶段会将这些 `OINDEXMAP` 操作转换成 `runtime.mapaccess1` 或 `mapaccess2` 方法。
 
+* 当接收一个参数时，会使用 `runtime.mapaccess1`，该函数仅会返回一个指向目标值的指针
+* 当接收两个参数时，会使用 `runtime.mapaccess2`，除了返回目标值，还会返回一个用于表示当前键是否存在的布尔值
+
+在查找键过程中，用于选择桶序号的时哈希的最低几位，而用于加速访问的是哈希的高 8 位，这种设计能够降低同一个桶中有大量相等 tophash 的概率以免影响性能。
+
+当 `map[key] = val` 形式出现时，该表达式会在编译期间转换成 `runtime.mapassign` 函数的调用。
+
+##### 哈希表扩容
+
+随着哈希表中元素的逐渐增加，哈希表性能会逐渐恶化，所以需要更多的桶和更大的内存保证哈希表的读写性能。`runtime.mapassign` 会在以下两种情况发生时触发扩容：
+
+* 装载因子超过 6.5：触发双倍扩容
+* 哈希表使用了过多的溢出桶：触发等量扩容
+
+哈希表的数据迁移是在 `runtime.evacuate` 中完成的，它会对传入桶中的元素进行再分配。
+
+##### 哈希表删除
+
+在编译期间，哈希表的删除操作会被转换成 `runtime.mapdelete` 中的一个：`runtime.mapdelete`、`runtime.mapdelete_faststr`、`runtime.mapdelete_fast32`、`runtime.mapdelete_fast64`。用于处理删除逻辑的函数与哈希表的 `runtime.mapassign` 几乎完全相同。
+
+
+
+### 字符串
 
