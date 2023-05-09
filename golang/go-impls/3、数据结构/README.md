@@ -1,3 +1,5 @@
+
+
 数据结构
 -------------
 
@@ -261,3 +263,4 @@ type bmap struct {
 
 ### 字符串
 
+从字节数组到字符串的转换需要使用 `runtime.slicebytetostring` 函数，而要将字符串转换为 `[]byte` 类型，需要使用 `runtime.stringtoslicebyte` 函数。
