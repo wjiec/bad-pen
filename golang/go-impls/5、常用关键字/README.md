@@ -42,3 +42,8 @@
 
 ### select
 
+Go 语言中的 `select` 能够让 Goroutine 同时等待多个 channel 可读或者可写。在 Go 语言中使用 `select` 控制结构时，我们有：
+
+* `select` 能在 channel 上进行非阻塞的收发操作（default 子句）
+* `select` 在遇到多个 channel 同时响应时，会随机选择执行一个分支
+
