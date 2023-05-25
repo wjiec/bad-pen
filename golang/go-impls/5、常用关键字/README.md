@@ -92,3 +92,77 @@ Go 语言中的 `select` 能够让 Goroutine 同时等待多个 channel 可读�
 
 ### defer
 
+在 Go 语言中，defer 的实现是由编译器和运行时共同完成的。向 defer 关键字传入的函数会在函数返回之前运行，在**使用 defer 关键字时会立刻复制函数中引用的外部参数**。
+
+#### 数据结构
+
+defer 关键字在 Go 语言运行时对应的数据结构是 `runtime._defer` 结构体：
+
+```go
+//
+// runtime/runtime2.go
+//
+
+// A _defer holds an entry on the list of deferred calls.
+// If you add a field here, add code to clear it in deferProcStack.
+// This struct must match the code in cmd/compile/internal/ssagen/ssa.go:deferstruct
+// and cmd/compile/internal/ssagen/ssa.go:(*state).call.
+// Some defers will be allocated on the stack and some on the heap.
+// All defers are logically part of the stack, so write barriers to
+// initialize them are not required. All defers must be manually scanned,
+// and for heap defers, marked.
+type _defer struct {
+	started bool
+	heap    bool
+	// openDefer indicates that this _defer is for a frame with open-coded
+	// defers. We have only one defer record for the entire frame (which may
+	// currently have 0, 1, or more defers active).
+	openDefer bool
+	sp        uintptr // sp at time of defer
+	pc        uintptr // pc at time of defer
+	fn        func()  // can be nil for open-coded defers
+	_panic    *_panic // panic that is running defer
+	link      *_defer // next defer on G; can point to either heap or stack!
+
+	// If openDefer is true, the fields below record values about the stack
+	// frame and associated function that has the open-coded defer(s). sp
+	// above will be the sp for the frame, and pc will be address of the
+	// deferreturn call in the function.
+	fd   unsafe.Pointer // funcdata for the function associated with the frame
+	varp uintptr        // value of varp for the stack frame
+	// framepc is the current pc associated with the stack frame. Together,
+	// with sp above (which is the sp associated with the stack frame),
+	// framepc/sp can be used as pc/sp pair to continue a stack trace via
+	// gentraceback().
+	framepc uintptr
+}
+```
+
+`runtime._defer` 结构体是延迟调用链表上的一个元素，所有结构体都会通过 `link` 字段串联成链表。defer 关键字的插入顺序是从后往前，而 defer 关键字执行是从前往后的，这也是为什么后调用的 defer 会优先执行。
+
+#### 堆中分配
+
+堆中分配是 `runtime._defer` 结构体是默认的兜底方案，编译器会将 defer 关键字都转换为 `runtime.deferproc` 函数，还会在函数返回之前插入 `runtime.deferreturn` 的函数调用。
+
+#### 栈上分配
+
+Go 1.13 对 defer 关键字进行了优化，当该关键字在函数体中最多执行一次时，编译器会将结构体分配到栈上并调用 `runtime.deferprocStack` 函数。与堆中分配的 `runtime._defer` 相比，该方法可以将 defer 关键字的额外开销降低越 30%。
+
+#### 开放编码
+
+Go 1.14 通过开放编码实现 defer 关键字，该设计使用代码内联优化 ddefer 关键字的额外开销，可以将 defer 的调用开销从 35ns 降低到 6ns。开发编码作为一种优化 defer 的方法，只有在以下场景会启用：
+
+* 函数的 defer 少于或等于 8 个（`deferBits`）
+* 函数的 defer 关键字不能在循环中执行
+* 函数的 return 语句与 defer 语句的乘积小于等于 15
+
+延迟比特和延迟记录是使用开放编码实现 defer 的两个最重要的结构，一旦决定使用开放编码，编译器会在编译期间在栈上初始化大小为 8 比特的 `deferBits` 变量。
+
+延迟比特的作用就是标记哪些 `defer` 关键字在函数中被执行，这样在函数返回时就可以跟酒对应 `deferBits` 的内容确定需要执行的函数。而也是因为 `deferBits` 的大小仅为 8 比特，所以该优化的启用条件为函数中的 defer 关键字数量少于 8 个。
+
+
+
+### panic 和 recover
+
+
+
