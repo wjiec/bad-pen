@@ -164,5 +164,72 @@ Go 1.14 通过开放编码实现 defer 关键字，该设计使用代码内联�
 
 ### panic 和 recover
 
+panic 能够改变程序的控制流，调用 panic 后会立刻停止执行当前函数的剩余代码，并在当前 Goroutine 中递归执行调用方的 defer 函数。而 recover 可以中止 panic 造成的程序崩溃。其中有几个重点：
 
+* panic 只会触发当前 Goroutine 的 defer 函数
+* recover 只在 defer 中调用中生效
+* panic 允许在 defer 中嵌套多次调用
+
+#### 数据结构
+
+在运行时，panic 由 `runtime._panic` 所表示，编译器会将 panic 调用转换为 `runtime.gopanic` 函数：
+
+```go
+//
+// runtime/runtime2.go
+//
+
+// A _panic holds information about an active panic.
+//
+// A _panic value must only ever live on the stack.
+//
+// The argp and link fields are stack pointers, but don't need special
+// handling during stack growth: because they are pointer-typed and
+// _panic values only live on the stack, regular stack pointer
+// adjustment takes care of them.
+type _panic struct {
+	argp      unsafe.Pointer // pointer to arguments of deferred call run during panic; cannot move - known to liblink
+	arg       any            // argument to panic
+	link      *_panic        // link to earlier panic
+	pc        uintptr        // where to return to in runtime if this panic is bypassed
+	sp        unsafe.Pointer // where to return to in runtime if this panic is bypassed
+	recovered bool           // whether this panic is over
+	aborted   bool           // the panic was aborted
+	goexit    bool
+}
+```
+
+#### 崩溃恢复
+
+编译器将关键字 recover 转换为 `runtime.gorecover` 函数调用：
+
+```go
+//
+// runtime/panic.go
+//
+
+// The implementation of the predeclared function recover.
+// Cannot split the stack because it needs to reliably
+// find the stack segment of its caller.
+//
+// TODO(rsc): Once we commit to CopyStackAlways,
+// this doesn't need to be nosplit.
+//
+//go:nosplit
+func gorecover(argp uintptr) any {
+	// Must be in a function running as part of a deferred call during the panic.
+	// Must be called from the topmost function of the call
+	// (the function used in the defer statement).
+	// p.argp is the argument pointer of that topmost deferred function call.
+	// Compare against argp reported by caller.
+	// If they match, the caller is the one who can recover.
+	gp := getg()
+	p := gp._panic
+	if p != nil && !p.goexit && !p.recovered && argp == uintptr(p.argp) {
+		p.recovered = true
+		return p.arg
+	}
+	return nil
+}
+```
 
