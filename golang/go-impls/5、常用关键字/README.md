@@ -233,3 +233,8 @@ func gorecover(argp uintptr) any {
 }
 ```
 
+
+
+### make 和 new
+
+make 的作用是初始化内置的数据结构，new 的作用是根据传入的类型分配一块内存空间，并返回指向这块内存空间的指针。
