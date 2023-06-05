@@ -56,3 +56,4 @@ type Mutex struct {
 
 #### RWMutex
 
+`sync.RWMutex` 是细粒度的互斥锁，它不限制资源的并发读，但是写操作无法并发进行。它建立在 `sync.Mutex` 上，在获取读锁时回使用 `sync.Mutex` 执行锁定，而获取读锁时会增加 `sync.Mutex.readerCount` 的值。
