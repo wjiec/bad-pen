@@ -52,8 +52,77 @@ type Mutex struct {
 
 互斥锁的加锁涉及自旋、信号量以及调度等概念。解锁则比较简单，根据所处的模式执行相应的逻辑即可。
 
-
-
 #### RWMutex
 
 `sync.RWMutex` 是细粒度的互斥锁，它不限制资源的并发读，但是写操作无法并发进行。它建立在 `sync.Mutex` 上，在获取读锁时回使用 `sync.Mutex` 执行锁定，而获取读锁时会增加 `sync.Mutex.readerCount` 的值。
+
+
+
+### 计时器
+
+Go 语言使用四叉堆维护所有的计时器。在 Go 1.10 之前，所有的计时器共用全局唯一的四叉堆，计时器的各种操作都需要获取全局唯一的互斥锁，这会严重影响计时器的性能。
+
+Go 1.10 将全局的四叉堆分割成了 64 个小的四叉堆，虽然增加了内存的占有同时能降低锁的粒度，但是计时器造成的处理器与线程之间频繁的上下文切换成了影响计时器性能的首要因素。
+
+在最新版本的实现中移除了计时器桶，所有的计时器都以最小四叉堆的形式存储在处理器 `runtime.p` 中。
+
+#### 数据结构
+
+`runtime.timer` 是 Go 语言计时器的内部表示：
+
+```go
+//
+// runtime/time.go
+//
+
+// Package time knows the layout of this structure.
+// If this struct changes, adjust ../time/sleep.go:/runtimeTimer.
+type timer struct {
+	// If this timer is on a heap, which P's heap it is on.
+	// puintptr rather than *p to match uintptr in the versions
+	// of this struct defined in other packages.
+	pp puintptr
+
+	// Timer wakes up at when, and then at when+period, ... (period > 0 only)
+	// each time calling f(arg, now) in the timer goroutine, so f must be
+	// a well-behaved function and not block.
+	//
+	// when must be positive on an active timer.
+	when   int64 // 当前计时器被唤醒的时间
+	period int64 // 两次被唤醒的间隔
+	f      func(any, uintptr) // 每次唤醒都会调用的函数
+	arg    any // 每次唤醒调用 f 传入的参数
+	seq    uintptr // 计时器被唤醒调用 f 时传入的参数，与 netpoll 有关
+
+	// What to set the when field to in timerModifiedXX status.
+	nextwhen int64 // 当修改计时器时需要修改到的时间
+
+	// The status field holds one of the values below.
+	status atomic.Uint32 // 计时器的状态
+}
+```
+
+对外暴露的计时器使用 `time.Timer` 结构体：
+
+```go
+// The Timer type represents a single event.
+// When the Timer expires, the current time will be sent on C,
+// unless the Timer was created by AfterFunc.
+// A Timer must be created with NewTimer or AfterFunc.
+type Timer struct {
+	C <-chan Time
+	r runtimeTimer
+}
+```
+
+#### 触发计时器
+
+Go 语言会在以下时刻触发计时器，运行计时器中保存的函数：
+
+* 调度器调度时会检查处理器中的计时器是否准备就绪（`runtime.checkTimers`）
+* 系统监控会检查是否有未执行的到期计时器（`runtime.sysmon`）
+
+
+
+### Channel
+
