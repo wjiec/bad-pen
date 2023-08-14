@@ -126,3 +126,116 @@ Go 语言会在以下时刻触发计时器，运行计时器中保存的函数�
 
 ### Channel
 
+channel 是支撑 Go 语言高性能并发编程模型的重要结构。目前的 Channel 收发操作均遵循**先进先出（FIFO）**的设计。
+
+#### 数据结构
+
+Go 语言的 Channel 在运行时使用 `runtime.hchan` 结构体表示：
+
+```go
+//
+// runtime/chan.go
+//
+
+type hchan struct {
+	qcount   uint           // total data in the queue
+	dataqsiz uint           // size of the circular queue
+	buf      unsafe.Pointer // points to an array of dataqsiz elements
+	elemsize uint16
+	closed   uint32
+	elemtype *_type // element type
+	sendx    uint   // send index
+	recvx    uint   // receive index
+	recvq    waitq  // list of recv waiters
+	sendq    waitq  // list of send waiters
+
+	// lock protects all fields in hchan, as well as several
+	// fields in sudogs blocked on this channel.
+	//
+	// Do not change another G's status while holding this lock
+	// (in particular, do not ready a G), as this can deadlock
+	// with stack shrinking.
+	lock mutex
+}
+```
+
+在 `sendq` 和 `recvq` 中存储了当前 Channel 由于缓冲区不足而阻塞的 Goroutine 列表。这些等待队列使用双向链表表示，链表中的元素都是 `runtime.sudog` 结构：
+
+```go
+// sudog represents a g in a wait list, such as for sending/receiving
+// on a channel.
+//
+// sudog is necessary because the g ↔ synchronization object relation
+// is many-to-many. A g can be on many wait lists, so there may be
+// many sudogs for one g; and many gs may be waiting on the same
+// synchronization object, so there may be many sudogs for one object.
+//
+// sudogs are allocated from a special pool. Use acquireSudog and
+// releaseSudog to allocate and free them.
+type sudog struct {
+	// The following fields are protected by the hchan.lock of the
+	// channel this sudog is blocking on. shrinkstack depends on
+	// this for sudogs involved in channel ops.
+
+	g *g
+
+	next *sudog
+	prev *sudog
+	elem unsafe.Pointer // data element (may point to stack)
+
+	// The following fields are never accessed concurrently.
+	// For channels, waitlink is only accessed by g.
+	// For semaphores, all fields (including the ones above)
+	// are only accessed when holding a semaRoot lock.
+
+	acquiretime int64
+	releasetime int64
+	ticket      uint32
+
+	// isSelect indicates g is participating in a select, so
+	// g.selectDone must be CAS'd to win the wake-up race.
+	isSelect bool
+
+	// success indicates whether communication over channel c
+	// succeeded. It is true if the goroutine was awoken because a
+	// value was delivered over channel c, and false if awoken
+	// because c was closed.
+	success bool
+
+	parent   *sudog // semaRoot binary tree
+	waitlink *sudog // g.waiting list or semaRoot
+	waittail *sudog // semaRoot
+	c        *hchan // channel
+}
+```
+
+`runtime.sudog` 表示一个在等待列表中的 Goroutine。
+
+#### 发送数据
+
+当我们向 channel 发送数据时，编译器会将其编译为 `runtime.chansend1` 方法，并最终调用 `runtime.chansend` 方法。
+
+* 如果目标 channel 没有被关闭并且已经有处于等待状态的 Goroutine，那么 `runtime.chansend` 会从接收队列中取出最先陷入等待的 Goroutine 并直接向他发送数据。
+* 如果目标 channel 包含缓冲区且缓冲区还没装满，则 `runtime.chansend` 将会使用 `runtime.chanbuf` 计算得到下一个存储数据的位置，然后通过 `runtime.typedmemmove` 将发送的数据复制到缓存区中，最后增加 sendx 索引和 qcount 计数器。
+* 当 channel 没有接受者能处理数据，则创建一个 `runtime.sudog` 结构，将其加入到 `hchan.sendq` 队列。
+
+#### 接收数据
+
+接收数据的操作将会被编译器转换为 `runtime.chanrecv1` 或 `runtime.chanrecv2` 的调用，最终走到 `runtime.chanrecv` 函数上。
+
+* 当我们从一个空 channel 中接收数据时，会直接调用 `runtime.gopark` 让出处理器的使用权。
+* 当 channel 已经被关闭且缓冲区中不存在任何数据时，将会清除 ep 指针指向的接收数据缓存区并直接返回
+* 当 sendq 队列中存在挂起的 goroutine，则会直接 sendq 队列中的数据直接复制到接收缓存区中
+* 当缓存区中包含数据，那么直接读取 recvx 索引对应的数据
+* 挂起当前的 goroutine，将 `runtime.sudog` 加入 recvq 队列中并进入休眠等待调度器唤醒。
+
+#### 关闭 channel
+
+关闭 channel 的操作将会被编译器转换为 `runtime.closechan` 调用。
+
+
+
+### 调度器
+
+
+
