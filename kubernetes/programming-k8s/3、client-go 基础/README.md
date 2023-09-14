@@ -356,3 +356,47 @@ type Interface interface {
 }
 ```
 
+错误处理对于 Watch 来说尤为重要。Watch 是长期运行的请求，但是它随时都有可能出错。
+
+
+
+### Informer 和缓存
+
+Informer 在 Watch 的基础上对常见的使用场景提供了一个更高层的编程接口，包括：内存缓存以及通过名字对内存中的对象或属性进行查找的功能。Informer 模型可以实现：
+
+* 以事件形式从 API 服务器获得输入
+* 提供一个名为 Lister 的类客户端接口，用于获取或列出内存缓存中的对象
+* 为添加、删除和更新事件注册处理函数
+* 通过内部存储实现内存缓存
+
+**注意：不要直接修改 Informer 管理的对象，而是在修改对象之前，要先进进行一次深拷贝。**
+
+#### 工作队列
+
+所谓「工作队列」是一个数据结构，用户可以按照队列所欲定义的顺序向这个队列中添加或取出元素。这种队列是一种优先队列，可以让实现控制器变得更加方便。工作队列基本都实现了一个接口：
+
+```go
+//
+// k8s.io/client-go/util/workqueue/queue.go
+//
+
+type Interface interface {
+	Add(item interface{})
+	Len() int
+	Get() (item interface{}, shutdown bool)
+	Done(item interface{})
+	ShutDown()
+	ShutDownWithDrain()
+	ShuttingDown() bool
+}
+```
+
+以下是一些基于该接口实现的队列类型：
+
+* `DelayingInterface`：可以用于延迟添加元素
+* `RateLimitingInterface`：对元素加入队列的频次进行限制，它派生自 `DelayingInterface`
+
+
+
+### 深入 API Machinery
+

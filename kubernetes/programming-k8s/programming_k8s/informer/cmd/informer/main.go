@@ -22,16 +22,15 @@ func main() {
 	defer runtime.HandleCrash()
 
 	factory := informers.NewSharedInformerFactory(clientset, time.Minute)
-	podLister := factory.Core().V1().Pods().Lister()
-	podInformer := factory.Core().V1().Pods().Informer()
+	podInformer := factory.Core().V1().Pods()
 
 	factory.Start(wait.NeverStop)
-	if !cache.WaitForCacheSync(wait.NeverStop, podInformer.HasSynced) {
+	if !cache.WaitForCacheSync(wait.NeverStop, podInformer.Informer().HasSynced) {
 		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 		return
 	}
 
-	_, err = podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err = podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pod := obj.(*corev1.Pod)
 
@@ -54,7 +53,7 @@ func main() {
 	}
 
 	for {
-		pods, err := podLister.List(labels.Everything())
+		pods, err := podInformer.Lister().List(labels.Everything())
 		if err != nil {
 			runtime.HandleError(err)
 			return
