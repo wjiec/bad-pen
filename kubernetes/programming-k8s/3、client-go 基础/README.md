@@ -400,3 +400,62 @@ type Interface interface {
 
 ### 深入 API Machinery
 
+GroupVersionKind（GVK）对应一种 Go 语言类型，但一种 Go 语言类型可以用于多个不同的 GVK。习惯上，Kind 都以驼峰命名法来命名，并且名词形式都使用单数形式。
+
+GroupVersionResource（GVR）对应一个 HTTP 路径，GVR 用于标识 Kubernetes API 的 REST 断点。
+
+#### REST 映射
+
+GVK 和 GVR 之间的映射关系被称为 REST 映射。在 Go 语言中通过 `RestMapper` 来表示：
+
+```go
+//
+// k8s.io/apimachinery/pkg/api/meta/interfaces.go
+//
+
+// RESTMapper allows clients to map resources to kind, and map kind and version
+// to interfaces for manipulating those objects. It is primarily intended for
+// consumers of Kubernetes compatible REST APIs as defined in docs/devel/api-conventions.md.
+//
+// The Kubernetes API provides versioned resources and object kinds which are scoped
+// to API groups. In other words, kinds and resources should not be assumed to be
+// unique across groups.
+//
+// TODO: split into sub-interfaces
+type RESTMapper interface {
+	// KindFor takes a partial resource and returns the single match.  Returns an error if there are multiple matches
+	KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error)
+
+	// KindsFor takes a partial resource and returns the list of potential kinds in priority order
+	KindsFor(resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error)
+
+	// ResourceFor takes a partial resource and returns the single match.  Returns an error if there are multiple matches
+	ResourceFor(input schema.GroupVersionResource) (schema.GroupVersionResource, error)
+
+	// ResourcesFor takes a partial resource and returns the list of potential resource in priority order
+	ResourcesFor(input schema.GroupVersionResource) ([]schema.GroupVersionResource, error)
+
+	// RESTMapping identifies a preferred resource mapping for the provided group kind.
+	RESTMapping(gk schema.GroupKind, versions ...string) (*RESTMapping, error)
+	// RESTMappings returns all resource mappings for the provided group kind if no
+	// version search is provided. Otherwise identifies a preferred resource mapping for
+	// the provided version(s).
+	RESTMappings(gk schema.GroupKind, versions ...string) ([]*RESTMapping, error)
+
+	ResourceSingularizer(resource string) (singular string, err error)
+}
+```
+
+#### Scheme
+
+Scheme 用于把 Golang 和实现无关的 GVK 关联起来，Scheme 的主要功能是对 Golang 类型与可能的 GVK 之间建立映射。
+
+#### 联系
+
+GVK = Group + Version + Kind，例如：apps/v1/deployments
+
+GVR = Group + Version + Resource，例如：apps/v1/deployments/coredns
+
+在实际开发过程中，资源数据都是以「结构体」的形式存储的。由于多版本的存在（不同版本之间的结构体存在差异），但是我们都会给这些资源相同的 Kind，只依靠 Kind 是无法唯一确定一个结构体的，所以我们需要通过 GVK 来唯一定位一个结构体。
+
+而 Scheme 则负责维护 GVK 和 GVR 之间的对应关系。
