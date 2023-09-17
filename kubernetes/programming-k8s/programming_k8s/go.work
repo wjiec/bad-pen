@@ -3,6 +3,7 @@ go 1.19
 use (
 	./informer
 	./machinery
+	./manifests
 	./quickstart
 	./watcher
 )
