@@ -1,2 +1,2 @@
 # kubectl proxy --port=8001
-GET http://localhost:8001/apis/example.org
+GET http://localhost:8001/apis/example.org/v1alpha1

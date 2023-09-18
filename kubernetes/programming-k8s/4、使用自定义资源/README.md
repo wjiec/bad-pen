@@ -188,3 +188,48 @@ spec:
 
 #### 子资源
 
+子资源是一个特殊的 HTTP 端点，自定义资源支持两种子资源：/scale 和 /status。它们都必须在 CRD 中显式启用才可使用：
+
+```yaml
+kind: CustomResourceDefinition
+apiVersion: apiextensions.k8s.io/v1
+metadata:
+  name: greeters.example.org
+spec:
+  group: example.org
+  names:
+    kind: Greeters
+    plural: greeters
+    singular: greeter
+    shortNames:
+      - gr
+    categories:
+      - all
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+```
+
+* /status 子资源：端点会忽略状态字段以外的所有内容
+
+* /scale 子资源：仅仅用于查看或修改资源中指定的福本数
+
+#### 动态客户端
+
+`k8s.io/client-go/dynamic` 提供的动态客户端对 GVK 完全无感知，它甚至不会使用除了 `unstructed.Unstructed` 以外的 Go 语言类型。这个客户端主要都是**通用控制器**在使用，比如垃圾回收控制器等。
+
+#### 强类型客户端
+
+强类型客户端为每种 GVK 都采用各不相同的专用的实际 Go 语言类型。一般我们会将 group/version.kind 这样的 GVK 放在 `pkg/apis/group/version` 目录下，并且需要在 `types.go` 中定义一个名为 `[kind]` 的 Go 结构体。该结构体还应该内嵌 `k8s.io/apimachinery/pkg/apis/meta/v1` 下的 `TypeMeta` 结构体。
+
+使用 `client-gen` 来生成强类型的客户端：
+
+```shell
+```
+
+
+

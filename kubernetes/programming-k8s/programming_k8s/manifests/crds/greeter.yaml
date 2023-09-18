@@ -54,3 +54,5 @@ spec:
         - name: Phase
           type: string
           jsonPath: .status.phase
+      subresources:
+        status: {}
