@@ -226,10 +226,4 @@ spec:
 
 强类型客户端为每种 GVK 都采用各不相同的专用的实际 Go 语言类型。一般我们会将 group/version.kind 这样的 GVK 放在 `pkg/apis/group/version` 目录下，并且需要在 `types.go` 中定义一个名为 `[kind]` 的 Go 结构体。该结构体还应该内嵌 `k8s.io/apimachinery/pkg/apis/meta/v1` 下的 `TypeMeta` 结构体。
 
-使用 `client-gen` 来生成强类型的客户端：
-
-```shell
-```
-
-
-
+使用 `client-gen` 来生成强类型的客户端（查看文档：[Generation and release cycle of clientset](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/generating-clientset.md)），我们首先需要创建
