@@ -26,7 +26,7 @@ type NamespacedResourceStatus struct {
 
 type NamespacedResourceList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []NamespacedResource `json:"items"`
 }

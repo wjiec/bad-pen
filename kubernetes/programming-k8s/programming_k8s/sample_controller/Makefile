@@ -1,21 +1,27 @@
-.DEFAULT_GOAL: codegen
+.PHONY: codegen
 
-test: .gen_register
+test: .gen-register
 
-codegen: .gen_register
+# go install k8s.io/code-generator/cmd/register-gen@latest
+.gen-register:
+	register-gen \
+		--go-header-file=$(PWD)/hack/boilerplate.go.txt \
+		--input-dirs=./pkg/apis/sample/v1alpha1 \
+		--output-base=. \
+		--output-file-base=zz_generated.register
+
+# go install k8s.io/code-generator/cmd/deepcopy-gen@latest
+.gen-deepcopy:
+	deepcopy-gen \
+		--go-header-file=$(PWD)/hack/boilerplate.go.txt \
+		--input-dirs=./pkg/apis/sample/v1alpha1 \
+		--output-base=. \
+		--output-file-base=zz_generated.deepcopy
+
+codegen: .gen-register .gen-deepcopy
 	client-gen -v 7 \
 		--go-header-file=$(PWD)/hack/boilerplate.go.txt \
-		--clientset-name=samplerclientset \
-		--input=sample/v1alpha1 \
-		--input-base=github.com/wjiec/programming_k8s/sample_controller/pkg/apis \
+		--clientset-name="sample" \
+		--input-dirs=./pkg/apis/sample/v1alpha1 \
 		--output-base=. \
-		--output-package=github.com/wjiec/programming_k8s/sample_controller/pkg/client/clientset_generated/ \
-		--trim-path-prefix=github.com/wjiec/programming_k8s/sample_controller
-
-.PHONY: .gen_register
-.gen_register:
-	register-gen \
-		--output-file-base=zz_generated.register \
-		--go-header-file=$(PWD)/hack/boilerplate.go.txt \
-		--output-base=$(PWD) \
-		--input-dirs=github.com/wjiec/programming_k8s/sample_controller/pkg/apis/v1alpha1
+		--output-package=pkg/client
