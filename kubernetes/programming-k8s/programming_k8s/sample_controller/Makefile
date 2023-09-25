@@ -1,27 +1,8 @@
 .PHONY: codegen
 
-test: .gen-register
-
-# go install k8s.io/code-generator/cmd/register-gen@latest
-.gen-register:
-	register-gen \
-		--go-header-file=$(PWD)/hack/boilerplate.go.txt \
-		--input-dirs=./pkg/apis/sample/v1alpha1 \
-		--output-base=. \
-		--output-file-base=zz_generated.register
-
-# go install k8s.io/code-generator/cmd/deepcopy-gen@latest
-.gen-deepcopy:
-	deepcopy-gen \
-		--go-header-file=$(PWD)/hack/boilerplate.go.txt \
-		--input-dirs=./pkg/apis/sample/v1alpha1 \
-		--output-base=. \
-		--output-file-base=zz_generated.deepcopy
-
-codegen: .gen-register .gen-deepcopy
-	client-gen -v 7 \
-		--go-header-file=$(PWD)/hack/boilerplate.go.txt \
-		--clientset-name="sample" \
-		--input-dirs=./pkg/apis/sample/v1alpha1 \
-		--output-base=. \
-		--output-package=pkg/client
+codegen:
+	deepcopy-gen -v 0 -O zz_generated.deepcopy --go-header-file /go/src/github.com/wjiec/programming_k8s/sample_controller/hack/boilerplate.go.txt --output-base /go/src --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
+	applyconfiguration-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/applyconfiguration --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
+	client-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --clientset-name versioned --input-base github.com/wjiec/programming_k8s/sample_controller/pkg --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/clientset --apply-configuration-package github.com/wjiec/programming_k8s/sample_controller/pkg/applyconfiguration --input sample/v1alpha1
+	lister-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/listers --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
+	informer-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/informers --versioned-clientset-package github.com/wjiec/programming_k8s/sample_controller/pkg/clientset/versioned --listers-package github.com/wjiec/programming_k8s/sample_controller/pkg/listers --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
