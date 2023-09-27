@@ -1,8 +1,23 @@
 .PHONY: codegen
 
+GO_MODULE = github.com/wjiec/programming_k8s/sample_controller
+
 codegen:
-	deepcopy-gen -v 0 -O zz_generated.deepcopy --go-header-file /go/src/github.com/wjiec/programming_k8s/sample_controller/hack/boilerplate.go.txt --output-base /go/src --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
-	applyconfiguration-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/applyconfiguration --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
-	client-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --clientset-name versioned --input-base github.com/wjiec/programming_k8s/sample_controller/pkg --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/clientset --apply-configuration-package github.com/wjiec/programming_k8s/sample_controller/pkg/applyconfiguration --input sample/v1alpha1
-	lister-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/listers --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
-	informer-gen -v 0 --go-header-file /root/code-generator/hack/boilerplate.go.txt --output-base /go/src --output-package github.com/wjiec/programming_k8s/sample_controller/pkg/informers --versioned-clientset-package github.com/wjiec/programming_k8s/sample_controller/pkg/clientset/versioned --listers-package github.com/wjiec/programming_k8s/sample_controller/pkg/listers --input-dirs github.com/wjiec/programming_k8s/sample_controller/pkg/apis/sample/v1alpha1
+ifdef DOCKER_HOST
+	@$(eval VOLUME_NAME=$(shell bash -c 'head --bytes 4 /dev/random | hexdump -e "/1 \"%02x\""'))
+	@docker volume create $(VOLUME_NAME)
+	@docker container create --name $(VOLUME_NAME) -v $(VOLUME_NAME):/code busybox
+	@docker cp . $(VOLUME_NAME):/code
+else
+	$(eval VOLUME_NAME=$(PWD))
+endif
+
+	docker run -ti --rm -v $(VOLUME_NAME):/go/src/$(GO_MODULE) -e GOPROXY=https://goproxy.cn,direct -e KUBE_DEBUG=1 kube-gen \
+		--boilerplate /go/src/$(GO_MODULE)/hack/boilerplate.go.txt \
+		--pkg-root $(GO_MODULE)/pkg
+
+ifdef DOCKER_HOST
+	@docker cp $(VOLUME_NAME):/code/pkg .
+	@docker rm $(VOLUME_NAME)
+	@docker volume rm $(VOLUME_NAME)
+endif
