@@ -12,7 +12,7 @@ else
 	$(eval VOLUME_NAME=$(PWD))
 endif
 
-	docker run -ti --rm -v $(VOLUME_NAME):/go/src/$(GO_MODULE) -e GOPROXY=https://goproxy.cn,direct -e KUBE_DEBUG=1 kube-gen \
+	docker run -ti --rm -v $(VOLUME_NAME):/go/src/$(GO_MODULE) -e GOPROXY=https://goproxy.cn,direct kube-gen \
 		--pkg-root $(GO_MODULE)/pkg
 
 ifdef DOCKER_HOST

@@ -3,8 +3,8 @@ module github.com/wjiec/programming_k8s/watcher
 go 1.19
 
 require (
-	k8s.io/api v0.28.1
-	k8s.io/apimachinery v0.28.1
+	k8s.io/api v0.28.2
+	k8s.io/apimachinery v0.28.2
 )
 
 require (

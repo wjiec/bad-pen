@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="sample_controller" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="programming_k8s" />
+    <working_directory value="$PROJECT_DIR$/sample_controller" />
+    <kind value="FILE" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/sample_controller/cmd/sample_controller/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

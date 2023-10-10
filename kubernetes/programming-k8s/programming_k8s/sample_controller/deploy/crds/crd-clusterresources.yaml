@@ -1,0 +1,71 @@
+kind: CustomResourceDefinition
+apiVersion: apiextensions.k8s.io/v1
+metadata:
+  name: clusterresources.sample.example.org
+spec:
+  group: sample.example.org
+  names:
+    kind: ClusterResources
+    listKind: ClusterResourceList
+    plural: clusterresources
+    singular: clusterresource
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            kind:
+              type: string
+            apiVersion:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                replicas:
+                  type: number
+              required:
+                - schedule
+            status:
+              type: object
+          required:
+            - kind
+            - apiVersion
+            - metadata
+            - spec
+    - name: v1alpha2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            kind:
+              type: string
+            apiVersion:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                replicas:
+                  type: number
+              required:
+                - schedule
+            status:
+              type: object
+          required:
+            - kind
+            - apiVersion
+            - metadata
+            - spec

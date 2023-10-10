@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-func NewClientset() (*kubernetes.Clientset, error) {
+func LoadConfig() (*rest.Config, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		var kubeconfig *string
@@ -19,9 +19,15 @@ func NewClientset() (*kubernetes.Clientset, error) {
 		} else {
 			kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 		}
+		flag.Parse()
 
 		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	}
+	return config, err
+}
+
+func NewClientset() (*kubernetes.Clientset, error) {
+	config, err := LoadConfig()
 	if err != nil {
 		return nil, err
 	}
