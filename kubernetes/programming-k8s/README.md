@@ -8,3 +8,5 @@ Kubernetes 编程
 [3、client-go 基础](3、client-go 基础/README.md)
 
 [4、使用自定义资源](4、使用自定义资源/README.md)
+
+[5、自动代码生成](5、自动代码生成/README.md)
