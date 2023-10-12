@@ -10,3 +10,5 @@ Kubernetes 编程
 [4、使用自定义资源](4、使用自定义资源/README.md)
 
 [5、自动代码生成](5、自动代码生成/README.md)
+
+[6、编写Operator的方案](6、编写Operator的方案/README.md)
