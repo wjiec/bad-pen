@@ -1,0 +1,7 @@
+kind: Greeter
+apiVersion: example.org/v1alpha1
+metadata:
+  name: hello
+spec:
+  schedule: "2023-10-16 17:00:00"
+  message: "hello world from greeter!"

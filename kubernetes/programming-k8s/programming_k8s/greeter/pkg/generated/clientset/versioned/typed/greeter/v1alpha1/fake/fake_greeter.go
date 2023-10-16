@@ -23,7 +23,7 @@ import (
 	"fmt"
 
 	v1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/apis/greeter/v1alpha1"
-	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/applyconfiguration/greeter/v1alpha1"
+	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/generated/applyconfiguration/greeter/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	types "k8s.io/apimachinery/pkg/types"

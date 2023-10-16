@@ -5,7 +5,8 @@ metadata:
 spec:
   group: example.org
   names:
-    kind: Greeters
+    kind: Greeter
+    listKind: GreeterList
     plural: greeters
     singular: greeter
   scope: Namespaced

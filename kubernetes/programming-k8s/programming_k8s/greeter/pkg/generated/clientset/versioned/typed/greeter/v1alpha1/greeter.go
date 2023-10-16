@@ -24,8 +24,8 @@ import (
 	"time"
 
 	v1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/apis/greeter/v1alpha1"
-	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/applyconfiguration/greeter/v1alpha1"
-	scheme "github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned/scheme"
+	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/generated/applyconfiguration/greeter/v1alpha1"
+	scheme "github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"

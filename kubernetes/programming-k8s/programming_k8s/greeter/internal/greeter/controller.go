@@ -3,6 +3,7 @@ package greeter
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,10 +20,11 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 
-	clientset "github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned"
-	greeterscheme "github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned/scheme"
-	greeterinformers "github.com/wjiec/programming_k8s/greeter/pkg/informers/externalversions/greeter/v1alpha1"
-	greeterlisters "github.com/wjiec/programming_k8s/greeter/pkg/listers/greeter/v1alpha1"
+	"github.com/wjiec/programming_k8s/greeter/pkg/apis/greeter/v1alpha1"
+	clientset "github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned"
+	greeterscheme "github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned/scheme"
+	greeterinformers "github.com/wjiec/programming_k8s/greeter/pkg/generated/informers/externalversions/greeter/v1alpha1"
+	greeterlisters "github.com/wjiec/programming_k8s/greeter/pkg/generated/listers/greeter/v1alpha1"
 )
 
 const (
@@ -150,9 +152,8 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
-// syncHandler compares the actual state with the desired, and attempts to
-// converge the two. It then updates the Status block of the Foo resource
-// with the current status of the resource.
+// syncHandler try to fetch this resource from the cluster and start
+// comparing the state of the resource to the expected state.
 func (c *Controller) syncHandler(ctx context.Context, key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
@@ -175,6 +176,30 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 	}
 	logger.Info("Get the greeter", "greeter", greeter)
 
+	return c.syncGreeter(greeter)
+}
+
+// syncGreeter compares the actual state with the desired, and attempts to
+// converge the two. It then updates the Status block of the Greeter resource
+// with the current status of the resource.
+func (c *Controller) syncGreeter(greeter *v1alpha1.Greeter) error {
+	// Clone because the original object is owned by the lister.
+	instance := greeter.DeepCopy()
+
+	if instance.Status.Phase == "" {
+		instance.Status.Phase = v1alpha1.PhasePending
+	}
+
+	// If no phase set, default to pending (the initial phase)
+	switch instance.Status.Phase {
+	case v1alpha1.PhasePending:
+	case v1alpha1.PhaseRunning:
+	case v1alpha1.PhaseCompleted:
+	}
+
+	if !reflect.DeepEqual(greeter, instance) {
+	}
+
 	return nil
 }
 
@@ -182,13 +207,14 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 // string which is then put onto the work queue. This method should *not* be
 // passed resources of any type other than Greeter.
 func (c *Controller) enqueueGreeter(object any) {
-	if key, err := cache.MetaNamespaceIndexFunc(object); err != nil {
+	if key, err := cache.MetaNamespaceKeyFunc(object); err != nil {
 		utilruntime.HandleError(err)
 	} else {
 		c.workQueue.Add(key)
 	}
 }
 
+// NewController returns a new greeter controller
 func NewController(
 	ctx context.Context,
 	kubeClientset kubernetes.Interface,

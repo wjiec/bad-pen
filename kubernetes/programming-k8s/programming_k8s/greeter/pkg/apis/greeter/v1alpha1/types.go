@@ -1,7 +1,7 @@
 package v1alpha1
 
 const (
-	PhasePending   = "PENDING"
-	PhaseRunning   = "RUNNING"
-	PhaseCompleted = "COMPLETED"
+	PhasePending   = "Pending"
+	PhaseRunning   = "Running"
+	PhaseCompleted = "Completed"
 )

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"net/http"
 
-	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned/typed/greeter/v1alpha1"
+	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned/typed/greeter/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

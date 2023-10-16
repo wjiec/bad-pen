@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="greeter" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="programming_k8s" />
+    <working_directory value="$PROJECT_DIR$/greeter" />
+    <kind value="PACKAGE" />
+    <package value="github.com/wjiec/programming_k8s/greeter" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/greeter/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

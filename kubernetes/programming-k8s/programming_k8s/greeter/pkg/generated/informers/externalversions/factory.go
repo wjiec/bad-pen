@@ -22,9 +22,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned"
-	greeter "github.com/wjiec/programming_k8s/greeter/pkg/informers/externalversions/greeter"
-	internalinterfaces "github.com/wjiec/programming_k8s/greeter/pkg/informers/externalversions/internalinterfaces"
+	versioned "github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned"
+	greeter "github.com/wjiec/programming_k8s/greeter/pkg/generated/informers/externalversions/greeter"
+	internalinterfaces "github.com/wjiec/programming_k8s/greeter/pkg/generated/informers/externalversions/internalinterfaces"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

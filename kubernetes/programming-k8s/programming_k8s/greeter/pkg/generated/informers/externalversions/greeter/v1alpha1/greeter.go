@@ -22,9 +22,9 @@ import (
 	time "time"
 
 	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/apis/greeter/v1alpha1"
-	versioned "github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned"
-	internalinterfaces "github.com/wjiec/programming_k8s/greeter/pkg/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/listers/greeter/v1alpha1"
+	versioned "github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned"
+	internalinterfaces "github.com/wjiec/programming_k8s/greeter/pkg/generated/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/generated/listers/greeter/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"

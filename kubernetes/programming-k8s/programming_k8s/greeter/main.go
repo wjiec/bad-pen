@@ -2,17 +2,19 @@ package main
 
 import (
 	"flag"
+	"path/filepath"
 	"time"
 
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/wjiec/programming_k8s/greeter/internal/greeter"
-	clientset "github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned"
-	informers "github.com/wjiec/programming_k8s/greeter/pkg/informers/externalversions"
-	"github.com/wjiec/programming_k8s/greeter/pkg/signals"
+	clientset "github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned"
+	informers "github.com/wjiec/programming_k8s/greeter/pkg/generated/informers/externalversions"
 )
 
 var (
@@ -21,7 +23,12 @@ var (
 )
 
 func init() {
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig. Only required if out-of-cluster.")
+	var defaultKubeConfig string
+	if home := homedir.HomeDir(); home != "" {
+		defaultKubeConfig = filepath.Join(home, ".kube", "config")
+	}
+
+	flag.StringVar(&kubeconfig, "kubeconfig", defaultKubeConfig, "Path to a kubeconfig. Only required if out-of-cluster.")
 	flag.StringVar(&masterURL, "master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
 }
 

@@ -19,7 +19,7 @@ package applyconfiguration
 
 import (
 	v1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/apis/greeter/v1alpha1"
-	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/applyconfiguration/greeter/v1alpha1"
+	greeterv1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/generated/applyconfiguration/greeter/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 )
 

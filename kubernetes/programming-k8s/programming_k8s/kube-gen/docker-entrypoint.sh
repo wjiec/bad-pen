@@ -12,6 +12,9 @@ PACKAGE_ROOT=""
 # The script will only display the commands to be executed without actually executing them.
 DRY_RUN=""
 
+# The basename of the generated package.
+OUTPUT_PACKAGE="generated"
+
 # The name of the generated clientset package.
 CLIENTSET_NAME="clientset"
 
@@ -192,7 +195,7 @@ function kube::codegen::internal::gen_applyconfiguration() {
     ${DRY_RUN} applyconfiguration-gen -v "$KUBE_VERBOSE" \
       --go-header-file="$BOILERPLATE" \
       --output-base="${GOPATH}/src" \
-      --output-package="$1/applyconfiguration" \
+      --output-package="$1/${OUTPUT_PACKAGE}/applyconfiguration" \
       "${gen_inputs[@]}"
   fi
 }
@@ -209,8 +212,8 @@ function kube::codegen::internal::gen_client() {
       --clientset-name="$VERSIONED_NAME" \
       --input-base="$(kube::codegen::internal::apis_base "$1" "$2")" \
       --output-base="${GOPATH}/src" \
-      --output-package="$1/${CLIENTSET_NAME}" \
-      --apply-configuration-package="$1/applyconfiguration" \
+      --output-package="$1/${OUTPUT_PACKAGE}/${CLIENTSET_NAME}" \
+      --apply-configuration-package="$1/${OUTPUT_PACKAGE}/applyconfiguration" \
       "${gv_inputs[@]}"
   fi
 }
@@ -225,7 +228,7 @@ function kube::codegen::internal::gen_lister() {
     ${DRY_RUN} lister-gen -v "$KUBE_VERBOSE" \
       --go-header-file="$BOILERPLATE" \
       --output-base="${GOPATH}/src" \
-      --output-package="$1/listers" \
+      --output-package="$1/${OUTPUT_PACKAGE}/listers" \
       "${gen_inputs[@]}"
   fi
 }
@@ -240,9 +243,9 @@ function kube::codegen::internal::gen_informer() {
     ${DRY_RUN} informer-gen -v "$KUBE_VERBOSE" \
       --go-header-file="$BOILERPLATE" \
       --output-base="${GOPATH}/src" \
-      --output-package="$1/informers" \
-      --versioned-clientset-package="$1/${CLIENTSET_NAME}/${VERSIONED_NAME}" \
-      --listers-package="$1/listers" \
+      --output-package="$1/${OUTPUT_PACKAGE}/informers" \
+      --versioned-clientset-package="$1/${OUTPUT_PACKAGE}/${CLIENTSET_NAME}/${VERSIONED_NAME}" \
+      --listers-package="$1/${OUTPUT_PACKAGE}/listers" \
       "${gen_inputs[@]}"
   fi
 }

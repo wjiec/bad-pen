@@ -21,7 +21,7 @@ import (
 	"net/http"
 
 	v1alpha1 "github.com/wjiec/programming_k8s/greeter/pkg/apis/greeter/v1alpha1"
-	"github.com/wjiec/programming_k8s/greeter/pkg/clientset/versioned/scheme"
+	"github.com/wjiec/programming_k8s/greeter/pkg/generated/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
