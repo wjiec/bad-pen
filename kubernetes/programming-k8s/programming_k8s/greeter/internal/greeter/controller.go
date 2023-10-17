@@ -8,6 +8,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -28,6 +29,19 @@ import (
 )
 
 const (
+	// MessageResourceExists is the message used for Events when a resource
+	// fails to sync due to a Pod already existing
+	MessageResourceExists = "Resource %q already exists and is not managed by Greeter"
+	// MessageResourceSynced is the message used for an Event fired when a Greeter
+	// is synced successfully
+	MessageResourceSynced = "Greeter synced successfully"
+
+	// ErrResourceExists is used as part of the Event 'reason' when a Greeter fails
+	// to sync due to a Pod of the same name already existing.
+	ErrResourceExists = "ErrResourceExists"
+	// SuccessSynced is used as part of the Event 'reason' when a Greeter is synced
+	SuccessSynced = "Synced"
+
 	controllerAgentName = "greeter-controller"
 )
 
@@ -66,7 +80,7 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	logger := klog.FromContext(ctx)
 
 	// Start the informer factories to begin populating the informer caches
-	logger.Info("Starting Foo controller")
+	logger.Info("Starting Greeter controller")
 
 	// Wait for the caches to be synced before starting workers
 	logger.Info("Waiting for informer caches to sync")
@@ -131,11 +145,15 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 		}
 
 		// Run the syncHandler, passing it the namespace/name string of the
-		// Foo resource to be synced.
-		if err := c.syncHandler(ctx, key); err != nil {
+		// Greeter resource to be synced.
+		if when, err := c.syncHandler(ctx, key); err != nil {
 			// Put the item back on the workqueue to handle any transient errors.
 			c.workQueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
+		} else if when != 0 {
+			// Put the item back on the workqueue after the indicated duration.
+			c.workQueue.AddAfter(key, when)
+			return nil
 		}
 
 		// Finally, if no error occurs we Forget this item, so it does not
@@ -154,38 +172,44 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 
 // syncHandler try to fetch this resource from the cluster and start
 // comparing the state of the resource to the expected state.
-func (c *Controller) syncHandler(ctx context.Context, key string) error {
+func (c *Controller) syncHandler(ctx context.Context, key string) (time.Duration, error) {
 	// Convert the namespace/name string into a distinct namespace and name
-	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
-
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
-		return nil
+		return 0, nil
 	}
 
-	// Get the Foo resource with this namespace/name
+	// Get the Greeter resource with this namespace/name
 	greeter, err := c.greeterLister.Greeters(namespace).Get(name)
 	if err != nil {
 		// The Greeter resource may no longer exist, in which case we stop processing.
 		if errors.IsNotFound(err) {
-			utilruntime.HandleError(fmt.Errorf("foo '%s' in work queue no longer exists", key))
-			return nil
+			utilruntime.HandleError(fmt.Errorf("greeter '%s' in work queue no longer exists", key))
+			return 0, nil
 		}
-		return err
+		return 0, err
 	}
-	logger.Info("Get the greeter", "greeter", greeter)
 
-	return c.syncGreeter(greeter)
+	return c.syncGreeter(ctx, greeter)
 }
 
 // syncGreeter compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Greeter resource
 // with the current status of the resource.
-func (c *Controller) syncGreeter(greeter *v1alpha1.Greeter) error {
-	// Clone because the original object is owned by the lister.
-	instance := greeter.DeepCopy()
+//
+//goland:noinspection GoDeprecation
+func (c *Controller) syncGreeter(ctx context.Context, greeter *v1alpha1.Greeter) (time.Duration, error) {
+	key, err := cache.MetaNamespaceKeyFunc(greeter)
+	if err != nil {
+		return 0, err
+	}
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
 
+	// NEVER modify objects from the store. It's a read-only, owned by the lister.
+	// You can use DeepCopy() to make a deep copy of original object and modify this copy
+	// Or create a copy manually for better performance
+	instance := greeter.DeepCopy()
 	if instance.Status.Phase == "" {
 		instance.Status.Phase = v1alpha1.PhasePending
 	}
@@ -193,14 +217,78 @@ func (c *Controller) syncGreeter(greeter *v1alpha1.Greeter) error {
 	// If no phase set, default to pending (the initial phase)
 	switch instance.Status.Phase {
 	case v1alpha1.PhasePending:
+		logger.Info("pending greeter", "schedule", instance.Spec.Schedule)
+
+		// Check if it's already time to execute
+		when, err := timeUntilSchedule(instance.Spec.Schedule)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("schedule parsing failed: %v", err))
+			// Error reading the schedule - requeue the request:
+			return 0, err
+		}
+
+		// Not yet time to execute, wait until the scheduled time
+		if when > 0 {
+			return when, nil
+		}
+
+		klog.Infof("it's time! ready to greet: %s", instance.Spec.Message)
+		instance.Status.Phase = v1alpha1.PhaseRunning
 	case v1alpha1.PhaseRunning:
-	case v1alpha1.PhaseCompleted:
+		logger.Info("running greeter", "message", instance.Spec.Message)
+		podForGreeter := newPodForGreeter(instance)
+
+		// Set Greeter instance as the owner and controller
+		owner := metav1.NewControllerRef(instance, v1alpha1.SchemeGroupVersion.WithKind("Greeter"))
+		podForGreeter.OwnerReferences = append(podForGreeter.OwnerReferences, *owner)
+
+		// Try to see if the pod already exists and if not
+		// (which we expect) then create a one-shot pod as per spec
+		found, err := c.podLister.Pods(podForGreeter.Namespace).Get(podForGreeter.Name)
+		if err != nil && errors.IsNotFound(err) {
+			found, err = c.kubeClientset.CoreV1().Pods(podForGreeter.Namespace).Create(ctx, podForGreeter, metav1.CreateOptions{})
+			if err != nil {
+				return 0, err
+			}
+			logger.Info("pod launched", "podName", podForGreeter.Name)
+		} else if err != nil {
+			// requeue with error
+			return 0, err
+		}
+
+		// If the Pod is not controlled by this Greeter resource, we should log
+		// a warning to the event recorder and return error msg.
+		if !metav1.IsControlledBy(found, instance) {
+			msg := fmt.Sprintf(MessageResourceExists, podForGreeter.Name)
+			c.recorder.Event(instance, corev1.EventTypeWarning, ErrResourceExists, msg)
+			return 0, fmt.Errorf("%s", msg)
+		}
+
+		if found.Status.Phase == corev1.PodFailed || found.Status.Phase == corev1.PodSucceeded {
+			logger.Info("container terminated", "reason", found.Status.Phase)
+			instance.Status.Phase = string(found.Status.Phase)
+		}
+	case v1alpha1.PhaseSucceeded:
+		logger.Info("greeter succeeded")
+	case v1alpha1.PhaseFailed:
+		logger.Info("greeter failed")
 	}
 
+	// If the CustomResourceSubresources feature gate is not enabled,
+	// we must use Update instead of UpdateStatus to update the Status block of the Greeter resource.
 	if !reflect.DeepEqual(greeter, instance) {
+		// UpdateStatus will not allow changes to the Spec of the resource,
+		// which is ideal for ensuring nothing other than resource status has been updated.
+		_, err := c.greeterClientset.GreeterV1alpha1().Greeters(instance.Namespace).UpdateStatus(ctx, instance, metav1.UpdateOptions{})
+		if err != nil {
+			return 0, err
+		}
+
+		c.recorder.Event(instance, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	}
 
-	return nil
+	// Don't requeue. We should be reconciled because either the pod or the CR changes.
+	return 0, nil
 }
 
 // enqueueGreeter takes a Greeter resource and converts it into a namespace/name
@@ -211,6 +299,74 @@ func (c *Controller) enqueueGreeter(object any) {
 		utilruntime.HandleError(err)
 	} else {
 		c.workQueue.Add(key)
+	}
+}
+
+// enqueuePod enqueue a pod and checks that the owner reference points to a Greeter object. It then
+// enqueues this Greeter object.
+func (c *Controller) enqueuePod(object any) {
+	pod, ok := (*corev1.Pod)(nil), false
+	if pod, ok = object.(*corev1.Pod); !ok {
+		tombstone, ok := object.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("error decoding pod, invalid type"))
+			return
+		}
+
+		pod, ok = tombstone.Obj.(*corev1.Pod)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("error decoding pod tombstone, invalid type"))
+			return
+		}
+	}
+
+	if ownerRef := metav1.GetControllerOf(pod); ownerRef != nil {
+		if ownerRef.Kind != "Greeter" {
+			return
+		}
+
+		greeter, err := c.greeterLister.Greeters(pod.Namespace).Get(ownerRef.Name)
+		if err != nil {
+			return
+		}
+
+		if metav1.IsControlledBy(pod, greeter) {
+			c.enqueueGreeter(greeter)
+		}
+	}
+}
+
+// timeUntilSchedule parses the schedule string and returns the time until the schedule.
+// When it is overdue, the duration is negative.
+func timeUntilSchedule(schedule string) (time.Duration, error) {
+	expected, err := time.ParseInLocation("2006-01-02 15:04:05", schedule, time.Local)
+	if err != nil {
+		return 0, err
+	}
+	return expected.Sub(time.Now().UTC()), nil
+}
+
+// newPodForGreeter returns a busybox pod with the same name/namespace as the greeter
+func newPodForGreeter(greeter *v1alpha1.Greeter) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      greeter.Name + "-runner",
+			Namespace: greeter.Namespace,
+			Labels: map[string]string{
+				"app.k8s.io/name": greeter.Name,
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Image:   "busybox",
+					Name:    "greeter",
+					Command: []string{"sh"},
+					Args:    []string{"-c", "echo " + greeter.Spec.Message},
+				},
+			},
+			RestartPolicy: corev1.RestartPolicyNever,
+		},
 	}
 }
 
@@ -253,12 +409,24 @@ func NewController(
 	// Set up an event handler for when Greeter resources change
 	_, err := greeterInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueGreeter,
-		UpdateFunc: func(old, new interface{}) {
-			controller.enqueueGreeter(new)
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			controller.enqueueGreeter(newObj)
 		},
 	})
 	if err != nil {
-		logger.Error(err, "Error setup event handler for greeter")
+		logger.Error(err, "Error setup event handler for Greeter")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
+	// Set up an event handler for when Pod resources change
+	_, err = podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: controller.enqueuePod,
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			controller.enqueuePod(newObj)
+		},
+	})
+	if err != nil {
+		logger.Error(err, "Error setup event handler for Pod")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
