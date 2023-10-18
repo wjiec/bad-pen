@@ -8,3 +8,9 @@
 ### 基于 sample-controller
 
 我们可以基于 `k8s.io/sample-controller` 来实现自定义的 Operator。详细参考代码实现。
+
+
+
+### 基于 kubebuilder
+
+我们可以基于 [kubebuilder](https://book.kubebuilder.io/) 来实现自定义的控制器，详情参考代码实现。
