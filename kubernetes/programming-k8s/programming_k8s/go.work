@@ -6,6 +6,6 @@ use (
 	./machinery
 	./manifests
 	./quickstart
-	./sample_controller
+	./sample-controller
 	./watcher
 )
