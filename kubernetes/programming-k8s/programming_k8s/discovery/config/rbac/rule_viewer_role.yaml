@@ -1,0 +1,27 @@
+# permissions for end users to view rules.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: rule-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: discovery
+    app.kubernetes.io/part-of: discovery
+    app.kubernetes.io/managed-by: kustomize
+  name: rule-viewer-role
+rules:
+- apiGroups:
+  - discovery.example.org
+  resources:
+  - rules
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.example.org
+  resources:
+  - rules/status
+  verbs:
+  - get
