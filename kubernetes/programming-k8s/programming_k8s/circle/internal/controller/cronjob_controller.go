@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,8 +42,8 @@ type CronJobReconciler struct {
 //+kubebuilder:rbac:groups=v1,resources=pods,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=v1,resources=pods/status,verbs=get
 
-var (
-	scheduledTimeAnnotation = "batch.example.org/scheduled-at"
+const (
+	jobOwnerKey = ".metadata.controller"
 )
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -60,6 +61,12 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	var childPods corev1.PodList
+	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
+		logger.Error(err, "unable to list child Pods")
+		return ctrl.Result{}, err
 	}
 
 	if len(cronJob.Spec.ConcurrencyPolicy) == 0 {

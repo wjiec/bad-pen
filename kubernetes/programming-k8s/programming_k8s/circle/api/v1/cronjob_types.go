@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -69,8 +68,8 @@ type CronJobSpec struct {
 	// +optional
 	Suspend *bool `json:"suspend,omitempty"`
 
-	// Specifies the job that will be created when executing a CronJob.
-	JobTemplate batchv1.JobTemplateSpec `json:"jobTemplate"`
+	// Specifies the pod that will be created when executing a CronJob.
+	JobTemplate corev1.PodTemplateSpec `json:"jobTemplate"`
 
 	// The number of successful finished jobs to retain.
 	// This is a pointer to distinguish between explicit zero and not specified.
