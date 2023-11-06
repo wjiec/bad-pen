@@ -21,6 +21,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,7 +44,7 @@ type CronJobReconciler struct {
 //+kubebuilder:rbac:groups=v1,resources=pods/status,verbs=get
 
 const (
-	jobOwnerKey = ".metadata.controller"
+	jobOwnerKey = ".metadata.controlled-by"
 )
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -62,19 +63,25 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	logger.V(1).Info("fetched cronjob", "cronjob", cronJob)
 
 	var childPods corev1.PodList
 	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
 		logger.Error(err, "unable to list child Pods")
 		return ctrl.Result{}, err
 	}
+	logger.V(1).Info("child of the cronjob", "pods", childPods)
 
-	if len(cronJob.Spec.ConcurrencyPolicy) == 0 {
-		copyCronJob := cronJob.DeepCopy()
-		copyCronJob.Spec.ConcurrencyPolicy = batchv1.AllowConcurrent
-
-		err := r.Client.Update(ctx, copyCronJob)
-		return ctrl.Result{}, err
+	var activePods, failedPods, succeedPods []*corev1.Pod
+	for idx, pod := range childPods.Items {
+		switch pod.Status.Phase {
+		case corev1.PodSucceeded:
+			succeedPods = append(succeedPods, &childPods.Items[idx])
+		case corev1.PodFailed:
+			failedPods = append(failedPods, &childPods.Items[idx])
+		default:
+			activePods = append(activePods, &childPods.Items[idx])
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -82,6 +89,24 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Clock == nil {
+		r.Clock = realClock{}
+	}
+
+	err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, jobOwnerKey, func(object client.Object) []string {
+		if pod, ok := object.(*corev1.Pod); ok {
+			if ownerRef := metav1.GetControllerOf(pod); ownerRef != nil {
+				if ownerRef.APIVersion == batchv1.GroupVersion.String() && ownerRef.Kind == "CronJob" {
+					return []string{ownerRef.Name}
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&batchv1.CronJob{}).
 		Complete(r)
@@ -90,5 +115,11 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Clock knows how to get the current time.
 // It can be used to fake out timing for testing.
 type Clock interface {
+	// Now returns the current local time.
 	Now() time.Time
 }
+
+type realClock struct{}
+
+// Now returns the current local time.
+func (realClock) Now() time.Time { return time.Now() }

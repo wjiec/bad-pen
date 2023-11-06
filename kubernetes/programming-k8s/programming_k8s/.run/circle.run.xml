@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="circle" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="programming_k8s" />
+    <working_directory value="$PROJECT_DIR$/circle" />
+    <kind value="PACKAGE" />
+    <package value="github.com/wjiec/programming_k8s/circle/cmd" />
+    <directory value="$PROJECT_DIR$" />
+    <method v="2" />
+  </configuration>
+</component>

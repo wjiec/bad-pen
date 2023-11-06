@@ -9,4 +9,20 @@ metadata:
     app.kubernetes.io/created-by: circle
   name: cronjob-sample
 spec:
-  # TODO(user): Add fields here
+  suspend: false
+  schedule: "* * * * *"
+  startingDeadlineSeconds: 30
+  concurrencyPolicy: Allow
+  jobTemplate:
+    spec:
+      containers:
+        - name: job
+          image: busybox
+          command:
+            - sh
+            - -c
+          args:
+            - "sleep $((RANDOM % 60))"
+      restartPolicy: Never
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
