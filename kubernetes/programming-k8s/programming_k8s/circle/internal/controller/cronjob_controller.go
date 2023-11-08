@@ -18,11 +18,15 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"time"
 
+	"github.com/robfig/cron"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -65,6 +69,8 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	logger.V(1).Info("fetched cronjob", "cronjob", cronJob)
 
+	// Stage 2: List all active jobs, and update the status
+
 	var childPods corev1.PodList
 	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
 		logger.Error(err, "unable to list child Pods")
@@ -72,17 +78,91 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	logger.V(1).Info("child of the cronjob", "pods", childPods)
 
-	var activePods, failedPods, succeedPods []*corev1.Pod
+	var lastScheduledTime time.Time
+	var activePods, failedPods, successfulPods []*corev1.Pod
 	for idx, pod := range childPods.Items {
 		switch pod.Status.Phase {
 		case corev1.PodSucceeded:
-			succeedPods = append(succeedPods, &childPods.Items[idx])
+			successfulPods = append(successfulPods, &childPods.Items[idx])
 		case corev1.PodFailed:
 			failedPods = append(failedPods, &childPods.Items[idx])
 		default:
 			activePods = append(activePods, &childPods.Items[idx])
 		}
+
+		podLastScheduledTime, err := getScheduleTimeForPod(&pod)
+		if err != nil {
+			logger.Error(err, "unable to parse schedule time for child pod", "pod", &pod)
+			continue
+		}
+
+		if podLastScheduledTime.After(lastScheduledTime) {
+			lastScheduledTime = podLastScheduledTime
+		}
 	}
+	logger.V(1).Info("job count", "active", len(activePods), "failed", len(failedPods), "successful", len(successfulPods))
+
+	cronJob.Status.Active = nil
+	cronJob.Status.LastScheduleTime = &metav1.Time{Time: lastScheduledTime}
+	for _, pod := range activePods {
+		podRef, err := reference.GetReference(r.Scheme, pod)
+		if err != nil {
+			logger.Error(err, "unable to make reference to active job", "pod", pod)
+			continue
+		}
+		cronJob.Status.Active = append(cronJob.Status.Active, *podRef)
+	}
+
+	if err := r.Status().Update(ctx, &cronJob); err != nil {
+		logger.Error(err, "unable to update CronJob status")
+		return ctrl.Result{}, err
+	}
+
+	// Stage 3: Clean up old jobs according to the history limit
+
+	// NB: deleting these are "best effort" -- if we fail on a particular one,
+	// we won't requeue just to finish the deleting.
+	if cronJob.Spec.FailedJobsHistoryLimit != nil {
+		sort.Slice(failedPods, func(i, j int) bool {
+			if failedPods[i].Status.StartTime == nil {
+				return failedPods[j].Status.StartTime != nil
+			}
+			return failedPods[i].Status.StartTime.Before(failedPods[j].Status.StartTime)
+		})
+
+		for i := 0; i < len(failedPods)-int(*cronJob.Spec.FailedJobsHistoryLimit); i++ {
+			if err := r.Delete(ctx, failedPods[i], client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "unable to delete old failed pod", "pod", failedPods[i])
+			} else {
+				logger.V(0).Info("deleted old failed pod", "pod", failedPods[i])
+			}
+		}
+	}
+	if cronJob.Spec.SuccessfulJobsHistoryLimit != nil {
+		sort.Slice(successfulPods, func(i, j int) bool {
+			if successfulPods[i].Status.StartTime == nil {
+				return successfulPods[j].Status.StartTime != nil
+			}
+			return successfulPods[i].Status.StartTime.Before(successfulPods[j].Status.StartTime)
+		})
+
+		for i := 0; i < len(successfulPods)-int(*cronJob.Spec.SuccessfulJobsHistoryLimit); i++ {
+			if err := r.Delete(ctx, successfulPods[i], client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "unable to delete old failed pod", "pod", successfulPods[i])
+			} else {
+				logger.V(0).Info("deleted old failed pod", "pod", successfulPods[i])
+			}
+		}
+	}
+
+	// Stage 4: Check if we’re suspended
+
+	if cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend {
+		logger.V(1).Info("cronjob suspended, skipping")
+		return ctrl.Result{}, nil
+	}
+
+	// Stage 5: Get the next scheduled run
 
 	return ctrl.Result{}, nil
 }
@@ -110,6 +190,31 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&batchv1.CronJob{}).
 		Complete(r)
+}
+
+var (
+	scheduledTimeAnnotation = "batch.example.org/scheduled-at"
+
+	ErrScheduleTimeNotFound = errors.New("scheduled time not found in the pod")
+)
+
+// getScheduleTimeForPod extract the scheduled time from the annotation
+// that we added during job creation.
+func getScheduleTimeForPod(pod *corev1.Pod) (time.Time, error) {
+	scheduledTime := pod.Annotations[scheduledTimeAnnotation]
+	if len(scheduledTime) != 0 {
+		return time.Parse(time.RFC3339, scheduledTime)
+	}
+	return time.Time{}, ErrScheduleTimeNotFound
+}
+
+func getNextScheduleTime(cronJob *batchv1.CronJob, now time.Time) (time.Time, error) {
+	schedule, err := cron.ParseStandard(cronJob.Spec.Schedule)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return schedule.Next(now), nil
 }
 
 // Clock knows how to get the current time.
