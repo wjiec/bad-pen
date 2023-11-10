@@ -164,7 +164,93 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Stage 5: Get the next scheduled run
 
-	return ctrl.Result{}, nil
+	// figure out the next times that we need to create jobs at (or anything we missed).
+	missedRun, nextRun, err := getNextScheduledTime(&cronJob, r.Now())
+	if err != nil {
+		logger.Error(err, "unable to figure out CronJob schedule")
+		// we don't really care about requeuing until we get an update that
+		// fixes the schedule, so don't return an error
+		return ctrl.Result{}, nil
+	}
+
+	// Stage 6: Run a new job if it’s on schedule, not past the deadline, and not blocked by our concurrency policy
+	waitingNextScheduleResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}
+	if missedRun.IsZero() {
+		logger.V(1).Info("no upcoming scheduled times, sleeping until next")
+		return waitingNextScheduleResult, nil
+	}
+
+	// If we’ve missed a run, and we’re still within the deadline to start it, we’ll need to run a job.
+	if cronJob.Spec.StartingDeadlineSeconds != nil {
+		// make sure we're not too late to start the run
+		schedulingDeadline := missedRun.Add(time.Second * time.Duration(*cronJob.Spec.StartingDeadlineSeconds))
+		if schedulingDeadline.After(r.Now()) {
+			logger.V(1).Info("missed starting deadline for last run, sleeping till next")
+			return waitingNextScheduleResult, nil
+		}
+	}
+
+	// now, we actually have to run a job, we’ll need to either wait till existing
+	// ones finish, replace the existing ones, or just add new ones.
+	if cronJob.Spec.ConcurrencyPolicy == batchv1.ForbidConcurrent && len(activePods) > 0 {
+		logger.V(1).Info("concurrency policy blocks concurrent runs, skipping", "num active", len(activePods))
+		return waitingNextScheduleResult, nil
+	}
+	if cronJob.Spec.ConcurrencyPolicy == batchv1.ReplaceConcurrent {
+		for _, activePod := range activePods {
+			// we don't care if the job was already deleted
+			if err = r.Delete(ctx, activePod, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "unable to delete active pod", "pod", activePod)
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	// we’ll actually create our desired job
+	pod, err := r.newPodForCronJob(&cronJob, missedRun)
+	if err != nil {
+		logger.Error(err, "unable to construct job from template")
+		// don't requeue until we get a change to the spec
+		return waitingNextScheduleResult, nil
+	}
+	if err = r.Create(ctx, pod); err != nil {
+		logger.Error(err, "unable to create Pod for CronJob", "pod", pod)
+		return ctrl.Result{}, err
+	}
+
+	// Stage 7: Requeue when we either see a running pod or it’s time for the next scheduled run
+
+	logger.V(1).Info("created Pod for CronJob run", "pod", pod)
+	// we'll requeue once we see the running pod, and update our status
+	return waitingNextScheduleResult, nil
+}
+
+// newPodForCronJob construct a pod based on our CronJob’s template.
+// We’ll copy over the spec from the template and copy some basic object meta.
+func (r *CronJobReconciler) newPodForCronJob(cronJob *batchv1.CronJob, scheduledTime time.Time) (*corev1.Pod, error) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:       map[string]string{},
+			Annotations:  map[string]string{},
+			GenerateName: cronJob.Name,
+			Namespace:    cronJob.Namespace,
+		},
+		Spec: *cronJob.Spec.JobTemplate.Spec.DeepCopy(),
+	}
+
+	for k, v := range cronJob.Spec.JobTemplate.Labels {
+		pod.Labels[k] = v
+	}
+	for k, v := range cronJob.Spec.JobTemplate.Annotations {
+		pod.Annotations[k] = v
+	}
+	pod.Annotations[scheduledTimeAnnotation] = scheduledTime.Format(time.RFC3339)
+
+	if err := ctrl.SetControllerReference(cronJob, pod, r.Scheme); err != nil {
+		return nil, err
+	}
+
+	return pod, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -208,13 +294,60 @@ func getScheduleTimeForPod(pod *corev1.Pod) (time.Time, error) {
 	return time.Time{}, ErrScheduleTimeNotFound
 }
 
-func getNextScheduleTime(cronJob *batchv1.CronJob, now time.Time) (time.Time, error) {
+// getNextScheduledTime calculate what time we should execute the new jobs based on
+// the earliest time, as well as calculate the next run time after the current time.
+func getNextScheduledTime(cronJob *batchv1.CronJob, now time.Time) (time.Time, time.Time, error) {
 	schedule, err := cron.ParseStandard(cronJob.Spec.Schedule)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, time.Time{}, err
 	}
 
-	return schedule.Next(now), nil
+	// we’ll start calculating appropriate times from our last run, or
+	// the creation of the CronJob if we can’t find a last run.
+	var earliestTime time.Time
+	if cronJob.Status.LastScheduleTime != nil {
+		earliestTime = cronJob.Status.LastScheduleTime.Time
+	} else {
+		earliestTime = cronJob.CreationTimestamp.Time
+	}
+
+	if cronJob.Spec.StartingDeadlineSeconds != nil {
+		// controller is not going to schedule anything below this point
+		schedulingDeadline := now.Add(-time.Second * time.Duration(*cronJob.Spec.StartingDeadlineSeconds))
+		if schedulingDeadline.After(earliestTime) {
+			earliestTime = schedulingDeadline
+		}
+	}
+
+	// There are currently no jobs to execute
+	if earliestTime.After(now) {
+		return time.Time{}, schedule.Next(now), nil
+	}
+
+	lastMissed, missingJobs := time.Time{}, 0
+	for t := schedule.Next(earliestTime); !t.After(now); t = schedule.Next(t) {
+		lastMissed = t
+		// An object might miss several starts. For example, if
+		// controller gets wedged on Friday at 5:01pm when everyone has
+		// gone home, and someone comes in on Tuesday AM and discovers
+		// the problem and restarts the controller, then all the hourly
+		// jobs, more than 80 of them for one hourly scheduledJob, should
+		// all start running with no further intervention (if the scheduledJob
+		// allows concurrency and late starts).
+		//
+		// However, if there is a bug somewhere, or incorrect clock
+		// on controller's server or apiservers (for setting creationTimestamp)
+		// then there could be so many missed start times (it could be off
+		// by decades or more), that it would eat up all the CPU and memory
+		// of this controller. In that case, we want to not try to list
+		// all the missed start times.
+		if missingJobs++; missingJobs > 100 {
+			// We can't get the most recent times so just return an empty slice
+			return time.Time{}, time.Time{}, errors.New("too many missed jobs")
+		}
+	}
+
+	return lastMissed, schedule.Next(now), nil
 }
 
 // Clock knows how to get the current time.
