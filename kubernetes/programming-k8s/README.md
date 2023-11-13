@@ -12,3 +12,5 @@ Kubernetes 编程
 [5、自动代码生成](5、自动代码生成/README.md)
 
 [6、编写Operator的方案](6、编写Operator的方案/README.md)
+
+[README.md](7、发布控制器和 Operator/README.md)
