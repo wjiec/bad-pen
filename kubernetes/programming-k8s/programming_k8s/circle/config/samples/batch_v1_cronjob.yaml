@@ -22,7 +22,7 @@ spec:
             - sh
             - -c
           args:
-            - "sleep $((RANDOM % 60))"
+            - "sleep $((RANDOM % 30))"
       restartPolicy: Never
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 2

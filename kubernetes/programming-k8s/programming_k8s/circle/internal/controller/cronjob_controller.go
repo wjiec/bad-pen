@@ -78,7 +78,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	logger.V(1).Info("child of the cronjob", "pods", childPods)
 
-	var lastScheduledTime time.Time
+	var lastScheduledTime = cronJob.CreationTimestamp.Time
 	var activePods, failedPods, successfulPods []*corev1.Pod
 	for idx, pod := range childPods.Items {
 		switch pod.Status.Phase {
@@ -130,7 +130,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return failedPods[i].Status.StartTime.Before(failedPods[j].Status.StartTime)
 		})
 
-		for i := 0; i < len(failedPods)-int(*cronJob.Spec.FailedJobsHistoryLimit); i++ {
+		for i := 0; i <= len(failedPods)-int(*cronJob.Spec.FailedJobsHistoryLimit); i++ {
 			if err := r.Delete(ctx, failedPods[i], client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
 				logger.Error(err, "unable to delete old failed pod", "pod", failedPods[i])
 			} else {
@@ -146,7 +146,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return successfulPods[i].Status.StartTime.Before(successfulPods[j].Status.StartTime)
 		})
 
-		for i := 0; i < len(successfulPods)-int(*cronJob.Spec.SuccessfulJobsHistoryLimit); i++ {
+		for i := 0; i <= len(successfulPods)-int(*cronJob.Spec.SuccessfulJobsHistoryLimit); i++ {
 			if err := r.Delete(ctx, successfulPods[i], client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
 				logger.Error(err, "unable to delete old failed pod", "pod", successfulPods[i])
 			} else {
@@ -184,7 +184,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if cronJob.Spec.StartingDeadlineSeconds != nil {
 		// make sure we're not too late to start the run
 		schedulingDeadline := missedRun.Add(time.Second * time.Duration(*cronJob.Spec.StartingDeadlineSeconds))
-		if schedulingDeadline.After(r.Now()) {
+		if schedulingDeadline.Before(r.Now()) {
 			logger.V(1).Info("missed starting deadline for last run, sleeping till next")
 			return waitingNextScheduleResult, nil
 		}
@@ -232,7 +232,7 @@ func (r *CronJobReconciler) newPodForCronJob(cronJob *batchv1.CronJob, scheduled
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:       map[string]string{},
 			Annotations:  map[string]string{},
-			GenerateName: cronJob.Name,
+			GenerateName: cronJob.Name + "-",
 			Namespace:    cronJob.Namespace,
 		},
 		Spec: *cronJob.Spec.JobTemplate.Spec.DeepCopy(),
