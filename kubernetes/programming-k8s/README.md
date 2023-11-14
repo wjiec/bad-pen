@@ -13,4 +13,6 @@ Kubernetes 编程
 
 [6、编写Operator的方案](6、编写Operator的方案/README.md)
 
-[README.md](7、发布控制器和 Operator/README.md)
+[7、发布控制器和 Operator](7、发布控制器和 Operator/README.md)
+
+[8、自定义 API 服务器](8、自定义 API 服务器/README.md)
