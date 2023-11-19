@@ -16,3 +16,5 @@ Kubernetes 编程
 [7、发布控制器和 Operator](7、发布控制器和 Operator/README.md)
 
 [8、自定义 API 服务器](8、自定义 API 服务器/README.md)
+
+[9、自定义资源进阶](9、自定义资源进阶/README.md)
